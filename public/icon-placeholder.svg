@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="瑜伽工资助手占位图标">
+  <rect width="512" height="512" rx="96" fill="#f8f5ee"/>
+  <circle cx="256" cy="156" r="48" fill="#2f7668"/>
+  <path d="M128 344c56-66 200-66 256 0" fill="none" stroke="#2f7668" stroke-width="38" stroke-linecap="round"/>
+  <path d="M168 272h176" stroke="#6f8f8a" stroke-width="34" stroke-linecap="round"/>
+  <path d="M220 232l-56 72M292 232l56 72" stroke="#2f7668" stroke-width="30" stroke-linecap="round"/>
+</svg>

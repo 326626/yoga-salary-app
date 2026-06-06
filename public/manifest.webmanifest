@@ -1,0 +1,19 @@
+{
+  "name": "瑜伽工资助手",
+  "short_name": "瑜伽工资",
+  "description": "服务于瑜伽老师日常记课、记业绩和查看工资的 App。",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#f8f5ee",
+  "background_color": "#f8f5ee",
+  "icons": [
+    {
+      "src": "/icon-placeholder.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

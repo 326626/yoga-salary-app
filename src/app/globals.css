@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 32 56% 96%;
+    --foreground: 222 22% 20%;
+    --card: 36 62% 99%;
+    --card-foreground: 222 22% 20%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 218 22% 16%;
+    --primary: 156 31% 38%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 342 45% 93%;
+    --secondary-foreground: 218 22% 16%;
+    --muted: 34 40% 92%;
+    --muted-foreground: 220 10% 45%;
+    --accent: 136 28% 89%;
+    --accent-foreground: 218 22% 16%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 26 34% 86%;
+    --input: 26 34% 86%;
+    --ring: 168 38% 34%;
+    --radius: 1.25rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    background:
+      radial-gradient(circle at top left, hsl(342 62% 94%) 0, transparent 34rem),
+      radial-gradient(circle at bottom right, hsl(136 40% 92%) 0, transparent 28rem),
+      hsl(var(--background));
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+  }
+}
