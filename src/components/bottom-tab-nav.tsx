@@ -18,7 +18,7 @@ export function BottomTabNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-md border-t border-white/70 bg-card/90 px-3 pb-[max(0.6rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl md:border-x" aria-label="底部导航">
+    <nav className="fixed bottom-0 left-1/2 z-50 w-full max-w-md -translate-x-1/2 border-t border-white/70 bg-card/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-12px_36px_rgba(70,55,42,0.10)] backdrop-blur-xl md:border-x" aria-label="底部导航">
       <div className="grid grid-cols-5 gap-1">
         {tabItems.map((item) => {
           const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);

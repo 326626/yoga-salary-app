@@ -41,7 +41,7 @@ export default function RootLayout({
                 <span className="rounded-full bg-secondary px-3 py-1 text-xs text-secondary-foreground">轻量原型</span>
               </div>
             </header>
-            <main className="px-4 pb-24 pt-5">{children}</main>
+            <main className="px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-5">{children}</main>
             <BottomTabNav />
           </div>
         </div>

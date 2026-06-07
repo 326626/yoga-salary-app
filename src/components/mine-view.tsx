@@ -83,7 +83,7 @@ export function MineView() {
           <CardContent className="space-y-4 p-4">
             <div>
               <div className="text-sm text-muted-foreground">当前账号</div>
-              <div className="mt-1 font-medium">{user.email}</div>
+              <div className="mt-1 font-medium">{user.phone || user.email || "已登录"}</div>
             </div>
             {teachers.length === 0 ? (
               <div className="space-y-3 rounded-3xl bg-secondary/70 p-4">

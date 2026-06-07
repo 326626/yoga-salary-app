@@ -102,6 +102,33 @@ DEEPSEEK_API_KEY=
 5. 配置 `.env.local`。
 6. 本地运行 `npm run dev`。
 
+### Auth 登录方式
+
+当前支持：
+
+- 邮箱 + 密码注册 / 登录
+- 手机号 + 密码注册 / 登录
+
+邮箱注册：
+
+- 如果 Supabase 开启了邮箱确认，注册成功后用户需要先打开邮箱，点击确认链接，再回来登录。
+- 如果登录失败，先检查邮箱是否已经确认。
+
+手机号 + 密码：
+
+- 本阶段不支持短信验证码登录。
+- 不需要 SMS OTP。
+- 不生成 fake email。
+- 不把手机号或密码存入业务表。
+- 仍然使用 Supabase Auth 的 `user.id` 作为业务表 `user_id`。
+- 如果 Supabase 控制台没有启用 Phone provider，页面会提示“当前手机号注册暂不可用，可以先使用邮箱注册～”。
+
+如需启用手机号 + 密码，请在 Supabase Dashboard 中检查：
+
+Authentication -> Providers -> Phone
+
+根据 Supabase 项目能力启用 Phone provider。不同 Supabase 项目设置可能略有差异；如果暂时不启用，用户可以继续使用邮箱注册 / 登录。
+
 当前完整 schema 包含：
 
 - `teachers`，兼容保留
@@ -147,6 +174,12 @@ http://localhost:3001/**
 - 开启 Email provider。
 - 开发阶段可以关闭邮箱确认，方便测试。
 - 生产阶段建议根据需要开启邮箱确认。
+
+5. Phone Auth：
+
+- 如果要使用手机号 + 密码登录，请启用 Phone provider。
+- 当前 App 不使用短信验证码，不需要配置 SMS OTP 流程。
+- 如果 Phone provider 未启用，手机号注册 / 登录会显示友好提示，邮箱方式不受影响。
 
 ### 上线前数据库检查
 
@@ -297,6 +330,9 @@ end $$;
 - `DEEPSEEK_API_KEY` 只在服务端使用。
 - Supabase RLS 已启用。
 - insert 时 `user_id` 来自当前登录用户，不从表单自由传入。
+- 不自建密码存储。
+- 不存储明文密码。
+- 不把密码存到业务表。
 - 不在代码中打印用户课程、业绩、工资规则、图片内容或 API Key。
 
 ## 当前暂未实现

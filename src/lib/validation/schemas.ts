@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { isValidChinaPhone } from "@/lib/auth/phone";
+
 export const courseTypeSchema = z.enum(["group", "private", "trial", "substitute", "other"]);
 
 export const performanceTypeSchema = z.enum(["new_card", "renewal", "private_package", "product", "other"]);
@@ -310,6 +312,41 @@ export const signupInputSchema = loginInputSchema
   .extend({
     confirmPassword: z.string().min(6, "确认密码至少 6 位")
   })
+  .refine((value) => value.password === value.confirmPassword, {
+    path: ["confirmPassword"],
+    message: "两次输入的密码不一致"
+  });
+
+export const authMethodSchema = z.enum(["email", "phone"]);
+
+export const authLoginInputSchema = z.discriminatedUnion("method", [
+  z.object({
+    method: z.literal("email"),
+    email: z.string().trim().min(1, "请先输入邮箱").email("邮箱格式不太对"),
+    password: z.string().min(6, "密码至少 6 位")
+  }),
+  z.object({
+    method: z.literal("phone"),
+    phone: z.string().trim().refine(isValidChinaPhone, "请输入正确的手机号"),
+    password: z.string().min(6, "密码至少 6 位")
+  })
+]);
+
+export const authSignupInputSchema = z
+  .discriminatedUnion("method", [
+    z.object({
+      method: z.literal("email"),
+      email: z.string().trim().min(1, "请先输入邮箱").email("邮箱格式不太对"),
+      password: z.string().min(6, "密码至少 6 位"),
+      confirmPassword: z.string().min(6, "确认密码至少 6 位")
+    }),
+    z.object({
+      method: z.literal("phone"),
+      phone: z.string().trim().refine(isValidChinaPhone, "请输入正确的手机号"),
+      password: z.string().min(6, "密码至少 6 位"),
+      confirmPassword: z.string().min(6, "确认密码至少 6 位")
+    })
+  ])
   .refine((value) => value.password === value.confirmPassword, {
     path: ["confirmPassword"],
     message: "两次输入的密码不一致"
