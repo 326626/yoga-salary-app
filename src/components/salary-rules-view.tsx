@@ -13,8 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { createSalaryRule, deactivateSalaryRules, getActiveSalaryRule, listStudios } from "@/lib/data";
-import { activeMockSalaryRule, mockStudios } from "@/lib/mock-data";
+import { createSalaryRule, deactivateSalaryRules, getActiveSalaryRule, listSalaryRules, listStudios } from "@/lib/data";
+import { activeMockSalaryRule, mockSalaryRules, mockStudios } from "@/lib/mock-data";
 import { describeSalaryRule } from "@/lib/salary/ruleDisplay";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { structuredSalaryRuleSchema } from "@/lib/validation";
@@ -26,6 +26,7 @@ const exampleRuleText =
 export function SalaryRulesView({ initialStudioId }: { initialStudioId?: string }) {
   const [user, setUser] = useState<User | null>(null);
   const [activeRule, setActiveRule] = useState<SalaryRule | undefined>(activeMockSalaryRule);
+  const [rules, setRules] = useState<SalaryRule[]>(mockSalaryRules);
   const [studios, setStudios] = useState<Studio[]>(mockStudios);
   const [studioId, setStudioId] = useState("");
   const [ruleName, setRuleName] = useState("新的工资规则");
@@ -39,6 +40,7 @@ export function SalaryRulesView({ initialStudioId }: { initialStudioId?: string 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageMessage, setImageMessage] = useState("");
   const [isImageParsing, setIsImageParsing] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(false);
 
   const activeDescription = useMemo(() => (activeRule ? describeSalaryRule(activeRule.structured_rule) : null), [activeRule]);
   const previewDescription = useMemo(() => (previewRule ? describeSalaryRule(previewRule) : null), [previewRule]);
@@ -51,8 +53,9 @@ export function SalaryRulesView({ initialStudioId }: { initialStudioId?: string 
       const currentUser = data.session?.user ?? null;
       setUser(currentUser);
       if (!currentUser) return;
-      const [realActiveRule, realStudios] = await Promise.all([getActiveSalaryRule(supabase, currentUser.id), listStudios(supabase, currentUser.id)]);
+      const [realActiveRule, realRules, realStudios] = await Promise.all([getActiveSalaryRule(supabase, currentUser.id), listSalaryRules(supabase, currentUser.id), listStudios(supabase, currentUser.id)]);
       setActiveRule(realActiveRule ?? undefined);
+      setRules(realRules);
       setStudios(realStudios);
       if (realStudios.some((studio) => studio.id === initialStudioId)) {
         setStudioId(initialStudioId ?? "");
@@ -174,10 +177,21 @@ export function SalaryRulesView({ initialStudioId }: { initialStudioId?: string 
         active: true
       });
       setActiveRule(newRule);
+      setRules((current) => [newRule, ...current.map((item) => item.studio_id === newRule.studio_id ? { ...item, active: false } : item)]);
       setFeedback("工资规则已启用～");
+      setIsFormOpen(false);
     } catch {
       setFeedback("保存失败，请稍后再试～");
     }
+  }
+
+  function handleCancel() {
+    setIsFormOpen(false);
+    setPreviewRule(null);
+    setJsonText("");
+    setJsonMessage("");
+    setParseMessage("");
+    setImageMessage("");
   }
 
   return (
@@ -186,6 +200,7 @@ export function SalaryRulesView({ initialStudioId }: { initialStudioId?: string 
         <p className="text-sm text-muted-foreground">先确认，再启用</p>
         <h1 className="text-2xl font-semibold tracking-normal">工资规则</h1>
       </div>
+      <Feedback message={feedback} tone={feedback.includes("失败") ? "error" : "success"} />
 
       <Card>
         <CardHeader className="p-4">
@@ -213,6 +228,26 @@ export function SalaryRulesView({ initialStudioId }: { initialStudioId?: string 
       </Card>
 
       <Card>
+        <CardHeader className="p-4">
+          <CardTitle className="text-lg">已有规则</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 p-4 pt-0">
+          {rules.length === 0 ? <div className="rounded-3xl border border-dashed bg-card/70 p-5 text-center text-sm text-muted-foreground">还没有保存过工资规则～</div> : rules.slice(0, 6).map((rule) => (
+            <div key={rule.id} className="rounded-3xl bg-secondary/70 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-medium">{rule.name}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">{rule.studio_id ? studios.find((studio) => studio.id === rule.studio_id)?.name ?? "指定瑜伽馆" : "通用规则"}</div>
+                </div>
+                {rule.active ? <Badge>active</Badge> : null}
+              </div>
+            </div>
+          ))}
+          {!isFormOpen ? <Button className="w-full" onClick={() => setIsFormOpen(true)}>新增工资规则</Button> : null}
+        </CardContent>
+      </Card>
+
+      {isFormOpen ? <Card>
         <CardHeader className="p-4">
           <CardTitle className="flex items-center gap-2 text-lg">
             <Sparkles className="size-5 text-primary" aria-hidden="true" />
@@ -243,11 +278,14 @@ export function SalaryRulesView({ initialStudioId }: { initialStudioId?: string 
           <Button className="w-full" onClick={handleParse} disabled={isParsing}>
             {isParsing ? "正在帮你识别规则～" : "帮我识别规则"}
           </Button>
+          <Button type="button" variant="secondary" className="w-full" onClick={handleCancel}>
+            取消
+          </Button>
           {parseMessage ? <Feedback message={parseMessage} tone={parseMessage.includes("正在") || parseMessage.includes("示例") ? "warning" : "success"} /> : null}
         </CardContent>
-      </Card>
+      </Card> : null}
 
-      <Card>
+      {isFormOpen ? <Card>
         <CardHeader className="p-4">
           <CardTitle className="flex items-center gap-2 text-lg">
             <ImageUp className="size-5 text-primary" aria-hidden="true" />
@@ -275,9 +313,9 @@ export function SalaryRulesView({ initialStudioId }: { initialStudioId?: string 
           </Button>
           {imageMessage ? <Feedback message={imageMessage} tone={imageMessage.includes("支持") || imageMessage.includes("复制") || imageMessage.includes("选择") ? "warning" : "success"} /> : null}
         </CardContent>
-      </Card>
+      </Card> : null}
 
-      {previewRule && previewDescription ? (
+      {isFormOpen && previewRule && previewDescription ? (
         <Card>
           <CardHeader className="p-4">
             <CardTitle className="text-lg">AI 识别结果预览</CardTitle>
@@ -314,7 +352,7 @@ export function SalaryRulesView({ initialStudioId }: { initialStudioId?: string 
             </Button>
           </CardContent>
         </Card>
-      ) : jsonText ? (
+      ) : isFormOpen && jsonText ? (
         <Card>
           <CardContent className="space-y-3 p-4">
             <Textarea className="min-h-72 font-mono text-sm" value={jsonText} onChange={(event) => setJsonText(event.target.value)} />

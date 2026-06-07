@@ -72,6 +72,21 @@ export const memberPackageSchema = z.object({
   created_at: createdAtSchema
 });
 
+export const packageItemSchema = z.object({
+  id: idSchema,
+  user_id: idSchema,
+  package_id: idSchema,
+  studio_id: idSchema.nullable(),
+  member_id: idSchema.nullable(),
+  item_name: z.string().trim().min(1),
+  course_type: courseTypeSchema,
+  sessions: z.number().positive(),
+  unit_price: z.number().nonnegative(),
+  total_amount: z.number().nonnegative(),
+  note: nullableTextSchema,
+  created_at: createdAtSchema
+});
+
 export const classRecordSchema = z.object({
   id: idSchema,
   user_id: idSchema,
@@ -79,6 +94,7 @@ export const classRecordSchema = z.object({
   studio_id: idSchema.nullable(),
   member_id: idSchema.nullable(),
   package_id: idSchema.nullable(),
+  package_item_id: idSchema.nullable(),
   date: dateSchema,
   course_name: z.string().trim().min(1),
   course_type: courseTypeSchema,
@@ -241,6 +257,7 @@ export const createClassRecordInputSchema = z.object({
   student_count: z.preprocess((value) => Number(value), z.number().int().nonnegative()),
   member_id: optionalIdSchema,
   package_id: optionalIdSchema,
+  package_item_id: optionalIdSchema,
   manual_fee: optionalNumberFromFormSchema,
   note: z.string().optional()
 });
@@ -290,6 +307,7 @@ export const createMemberInputSchema = z.object({
 export const updateMemberInputSchema = createMemberInputSchema;
 
 export const createMemberPackageInputSchema = z.object({
+  package_mode: z.enum(["single", "bundle"]).optional(),
   member_id: idSchema,
   teacher_id: optionalIdSchema,
   studio_id: idSchema,
@@ -300,8 +318,18 @@ export const createMemberPackageInputSchema = z.object({
   unit_price: optionalNumberFromFormSchema,
   total_sessions: positiveNumberFromFormSchema,
   purchase_date: dateSchema,
-  note: z.string().optional()
+  note: z.string().optional(),
+  items: z.array(z.object({
+    item_name: z.string().trim().min(1, "请输入项目名称"),
+    course_type: courseTypeSchema,
+    sessions: positiveNumberFromFormSchema,
+    unit_price: nonnegativeNumberFromFormSchema,
+    note: z.string().optional()
+  })).optional()
 }).superRefine((value, context) => {
+  if (value.package_mode === "bundle" && (!value.items || value.items.length === 0)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["items"], message: "组合课包至少需要 1 个项目" });
+  }
   if ((value.pricing_mode ?? "total_amount") === "unit_price") {
     if (typeof value.unit_price !== "number") {
       context.addIssue({ code: z.ZodIssueCode.custom, path: ["unit_price"], message: "请输入客单价 / 单节成交价" });

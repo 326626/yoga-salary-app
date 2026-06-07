@@ -8,13 +8,13 @@ import { ArrowLeft, BookOpenCheck, CreditCard, PenLine, Trash2 } from "lucide-re
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { calculatePackageUsageFromClasses, countPackageRelations, deleteMemberPackage, getPackageDetail, listClassesByPackage, listMembers, listStudios, type PackageUsage } from "@/lib/data";
+import { calculatePackageItemUsage, calculatePackageUsageFromClasses, countPackageRelations, deleteMemberPackage, getPackageDetail, listClassesByPackage, listMembers, listPackageItemsByPackage, listStudios, type PackageItemUsage, type PackageUsage } from "@/lib/data";
 import { mockClasses, mockMembers, mockPackages, mockStudios } from "@/lib/mock-data";
-import { getPackageFinishedMessage, getPackageUsageLabel, getPackageUsageTone } from "@/lib/packages/usageDisplay";
+import { getPackageFinishedMessage, getPackageItemUsageLabel, getPackageUsageLabel, getPackageUsageTone } from "@/lib/packages/usageDisplay";
 import { getPackageDeletePrompt } from "@/lib/relationPrompts";
 import { formatMoney } from "@/lib/salary/formatMoney";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
-import type { ClassRecord, Member, MemberPackage, Studio } from "@/types";
+import type { ClassRecord, Member, MemberPackage, PackageItem, Studio } from "@/types";
 
 const courseTypeLabels: Record<string, string> = { group: "团课", private: "私教", trial: "体验课", substitute: "代课", other: "其他" };
 
@@ -23,6 +23,7 @@ export function PackageDetailView({ packageId }: { packageId: string }) {
   const [item, setItem] = useState<MemberPackage | null>(mockPackages.find((record) => record.id === packageId) ?? null);
   const [members, setMembers] = useState<Member[]>(mockMembers);
   const [studios, setStudios] = useState<Studio[]>(mockStudios);
+  const [packageItems, setPackageItems] = useState<PackageItem[]>([]);
   const [classes, setClasses] = useState<ClassRecord[]>(mockClasses.filter((record) => record.package_id === packageId));
   const [message, setMessage] = useState("");
 
@@ -36,15 +37,17 @@ export function PackageDetailView({ packageId }: { packageId: string }) {
         setMessage("当前是体验数据，登录后可以查看你自己的课包详情。");
         return;
       }
-      const [realPackage, realMembers, realStudios, realClasses] = await Promise.all([
+      const [realPackage, realMembers, realStudios, realPackageItems, realClasses] = await Promise.all([
         getPackageDetail(supabase, currentUser.id, packageId),
         listMembers(supabase, currentUser.id),
         listStudios(supabase, currentUser.id),
+        listPackageItemsByPackage(supabase, currentUser.id, packageId),
         listClassesByPackage(supabase, currentUser.id, packageId)
       ]);
       setItem(realPackage);
       setMembers(realMembers);
       setStudios(realStudios);
+      setPackageItems(realPackageItems);
       setClasses(realClasses);
     }).catch(() => setMessage("网络好像开小差了，请再试一次～"));
   }, [packageId]);
@@ -77,7 +80,7 @@ export function PackageDetailView({ packageId }: { packageId: string }) {
 
   const member = members.find((record) => record.id === item.member_id);
   const studio = studios.find((record) => record.id === item.studio_id);
-  const usage = calculatePackageUsageFromClasses(item, classes);
+  const usage = calculatePackageUsageFromClasses(item, classes, packageItems);
 
   return (
     <div className="space-y-5">
@@ -120,6 +123,17 @@ export function PackageDetailView({ packageId }: { packageId: string }) {
         </CardContent>
       </Card>
 
+      {packageItems.length > 0 ? (
+        <Card>
+          <CardContent className="space-y-3 p-5">
+            <h2 className="text-base font-semibold">课包项目</h2>
+            {packageItems.map((packageItem) => (
+              <PackageItemRow key={packageItem.id} item={packageItem} usage={calculatePackageItemUsage(packageItem, classes)} />
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
+
       <h2 className="flex items-center gap-2 text-base font-semibold"><BookOpenCheck className="size-4 text-primary" />最近消课</h2>
       {classes.length === 0 ? <Empty text="还没有用这个课包记录课程。" /> : classes.slice(0, 8).map((record) => (
         <article key={record.id} className="rounded-3xl border border-white/70 bg-card/90 p-4 shadow-sm">
@@ -153,6 +167,25 @@ function UsageProgress({ usage }: { usage: PackageUsage }) {
         <div className="h-full rounded-full bg-primary/70" style={{ width: `${progress}%` }} />
       </div>
       {tone === "warning" ? <p className="text-sm text-amber-700">这个课包已经上完啦～</p> : null}
+    </div>
+  );
+}
+
+function PackageItemRow({ item, usage }: { item: PackageItem; usage: PackageItemUsage }) {
+  const progress = usage.totalSessions > 0 ? Math.min(Math.max((usage.usedSessions / usage.totalSessions) * 100, 0), 100) : 0;
+
+  return (
+    <div className="space-y-2 rounded-3xl bg-secondary/70 p-3 text-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="font-medium">{item.item_name}</div>
+          <div className="mt-1 text-muted-foreground">{courseTypeLabels[item.course_type]} · {item.sessions} 节 · ¥{formatMoney(item.unit_price)}/节</div>
+        </div>
+        <div className={usage.isOverused ? "font-medium text-destructive" : "font-medium text-primary"}>{getPackageItemUsageLabel(usage)}</div>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-card/80">
+        <div className="h-full rounded-full bg-primary/70" style={{ width: `${progress}%` }} />
+      </div>
     </div>
   );
 }

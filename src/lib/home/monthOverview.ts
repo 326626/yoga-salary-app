@@ -1,6 +1,6 @@
 import { calculateMonthlySalary } from "@/lib/salary/calculateMonthlySalary";
 import { roundMoney } from "@/lib/salary/formatMoney";
-import type { ClassRecord, MemberPackage, Performance, SalaryCalculation, SalaryRule, Teacher } from "@/types";
+import type { ClassRecord, MemberPackage, PackageItem, Performance, SalaryCalculation, SalaryRule, Teacher } from "@/types";
 
 export type HomeMonthOverview = {
   mode: "demo" | "real";
@@ -19,6 +19,7 @@ type BuildHomeMonthOverviewInput = {
   classes: ClassRecord[];
   performances: Performance[];
   packages: MemberPackage[];
+  packageItems?: PackageItem[];
   activeSalaryRule?: SalaryRule | null;
   salaryCalculations?: SalaryCalculation[];
 };
@@ -77,6 +78,7 @@ export function buildHomeMonthOverview(input: BuildHomeMonthOverviewInput): Home
     classes: input.classes,
     performances: input.performances,
     packages: input.packages,
+    packageItems: input.packageItems,
     salaryRule: input.activeSalaryRule.structured_rule
   });
 

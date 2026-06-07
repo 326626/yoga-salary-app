@@ -1,4 +1,4 @@
-import type { PackageUsage } from "@/lib/data/packageUsage";
+import type { PackageItemUsage, PackageUsage } from "@/lib/data/packageUsage";
 
 export function formatSessionCount(value: number) {
   const rounded = Math.round((value + Number.EPSILON) * 100) / 100;
@@ -9,6 +9,10 @@ export function getPackageUsageLabel(usage: Pick<PackageUsage, "remainingSession
   if (usage.remainingSessions > 0) return `还剩 ${formatSessionCount(usage.remainingSessions)} 节`;
   if (usage.remainingSessions === 0) return "已上完";
   return `已超 ${formatSessionCount(Math.abs(usage.remainingSessions))} 节`;
+}
+
+export function getPackageItemUsageLabel(usage: Pick<PackageItemUsage, "remainingSessions">) {
+  return getPackageUsageLabel(usage);
 }
 
 export function getPackageUsageTone(usage: Pick<PackageUsage, "remainingSessions">): "success" | "warning" | "error" {

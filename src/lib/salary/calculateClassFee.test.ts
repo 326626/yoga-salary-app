@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { activeMockSalaryRule, mockClasses, mockPackages } from "@/lib/mock-data";
+import type { PackageItem } from "@/types";
 
 import { calculateClassFee } from "./calculateClassFee";
 
@@ -42,6 +43,32 @@ describe("calculateClassFee", () => {
 
     expect(result.total).toBe(200);
     expect(result.classFees[0].formula).toContain("500.00 元 × 40%");
+  });
+
+  it("uses package item unit price before package unit price", () => {
+    const classRecord = {
+      ...mockClasses.find((item) => item.package_id === mockPackages[0].id)!,
+      package_item_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1"
+    };
+    const packageItems: PackageItem[] = [{
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+      user_id: classRecord.user_id,
+      package_id: mockPackages[0].id,
+      studio_id: classRecord.studio_id,
+      member_id: classRecord.member_id,
+      item_name: "理疗私教",
+      course_type: "private",
+      sessions: 2,
+      unit_price: 500,
+      total_amount: 1000,
+      note: null,
+      created_at: classRecord.created_at
+    }];
+    const result = calculateClassFee({ classes: [classRecord], packages: mockPackages, packageItems, salaryRule: salaryRule() });
+
+    expect(result.total).toBe(200);
+    expect(result.classFees[0].formula).toContain("500.00 元 × 40%");
+    expect(result.classFees[0].packageItemId).toBe(packageItems[0].id);
   });
 
   it("returns warning and zero amount when private class misses package_id", () => {

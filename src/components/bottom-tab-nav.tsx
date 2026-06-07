@@ -26,8 +26,8 @@ export function BottomTabNav() {
             <Link
               key={item.href}
               href={item.href}
-              className={cn(
-                "flex min-h-[3.25rem] flex-col items-center justify-center gap-1 rounded-2xl text-xs transition-colors",
+            className={cn(
+                "flex min-h-[var(--app-tab-height)] flex-col items-center justify-center gap-1 rounded-2xl text-xs transition-colors",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 isActive ? "bg-secondary text-primary shadow-sm" : "text-muted-foreground hover:bg-secondary/70 hover:text-foreground"
               )}

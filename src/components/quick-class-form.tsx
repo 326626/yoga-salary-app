@@ -15,14 +15,14 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { applyClassQueryPrefill, derivePackageSelection, filterPackagesForMember, type ClassPrefillQuery } from "@/lib/classPrefill";
-import { calculatePackageUsageFromClasses, createClassRecord, createDefaultTeacher, deleteClassRecord, listClasses, listMembers, listPackages, listStudios, listTeachers, updateClassRecord, type PackageUsage } from "@/lib/data";
+import { calculatePackageItemUsage, calculatePackageUsageFromClasses, createClassRecord, createDefaultTeacher, deleteClassRecord, listClasses, listMembers, listPackageItems, listPackages, listStudios, listTeachers, updateClassRecord, type PackageItemUsage, type PackageUsage } from "@/lib/data";
 import { mockClasses, mockMembers, mockPackages, mockStudios, mockTeachers } from "@/lib/mock-data";
-import { buildOveruseWarning, getPackageFinishedMessage, getPackageUsageLabel, getPackageUsageTone } from "@/lib/packages/usageDisplay";
+import { buildOveruseWarning, getPackageFinishedMessage, getPackageItemUsageLabel, getPackageUsageLabel, getPackageUsageTone } from "@/lib/packages/usageDisplay";
 import { filterClassesByStudio, type StudioRecordFilter } from "@/lib/records/recordFilters";
 import { buildClassSummary } from "@/lib/records/recordSummaries";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { createClassRecordInputSchema } from "@/lib/validation";
-import type { ClassRecord, CourseType, Member, MemberPackage, Studio, Teacher } from "@/types";
+import type { ClassRecord, CourseType, Member, MemberPackage, PackageItem, Studio, Teacher } from "@/types";
 
 const courseTypeLabels: Record<CourseType, string> = { group: "团课", private: "私教", trial: "体验课", substitute: "代课", other: "其他" };
 type FieldErrors = Partial<Record<keyof z.infer<typeof createClassRecordInputSchema>, string>>;
@@ -37,6 +37,7 @@ const initialForm = {
   student_count: "1",
   member_id: "",
   package_id: "",
+  package_item_id: "",
   manual_fee: "",
   note: ""
 };
@@ -47,6 +48,7 @@ export function QuickClassForm({ initialQuery = {} }: { initialQuery?: ClassPref
   const [studios, setStudios] = useState<Studio[]>(mockStudios);
   const [members, setMembers] = useState<Member[]>(mockMembers);
   const [packages, setPackages] = useState<MemberPackage[]>(mockPackages);
+  const [packageItems, setPackageItems] = useState<PackageItem[]>([]);
   const [records, setRecords] = useState<ClassRecord[]>(mockClasses);
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -65,17 +67,19 @@ export function QuickClassForm({ initialQuery = {} }: { initialQuery?: ClassPref
       setUser(currentUser);
       if (!currentUser) return;
       try {
-        const [realTeachers, realStudios, realMembers, realPackages, realClasses] = await Promise.all([
+        const [realTeachers, realStudios, realMembers, realPackages, realPackageItems, realClasses] = await Promise.all([
           listTeachers(supabase, currentUser.id),
           listStudios(supabase, currentUser.id),
           listMembers(supabase, currentUser.id),
           listPackages(supabase, currentUser.id),
+          listPackageItems(supabase, currentUser.id),
           listClasses(supabase, currentUser.id)
         ]);
         setTeachers(realTeachers);
         setStudios(realStudios);
         setMembers(realMembers);
         setPackages(realPackages);
+        setPackageItems(realPackageItems);
         setRecords(realClasses);
         const preferredStudioId = realStudios.some((studio) => studio.id === initialQuery.studioId) ? initialQuery.studioId : realStudios[0]?.id;
         setForm((current) => applyClassQueryPrefill({ ...current, teacher_id: realTeachers[0]?.id ?? "", studio_id: preferredStudioId ?? "" }, initialQuery, realPackages));
@@ -98,10 +102,13 @@ export function QuickClassForm({ initialQuery = {} }: { initialQuery?: ClassPref
   const isPrivate = form.course_type === "private";
   const packageOptions = useMemo(() => filterPackagesForMember(packages, form.member_id), [form.member_id, packages]);
   const selectedPackage = useMemo(() => packages.find((item) => item.id === form.package_id), [form.package_id, packages]);
+  const selectedPackageItems = useMemo(() => packageItems.filter((item) => item.package_id === form.package_id), [form.package_id, packageItems]);
+  const selectedPackageItem = useMemo(() => packageItems.find((item) => item.id === form.package_item_id), [form.package_item_id, packageItems]);
   const selectedPackageUsage = useMemo(
-    () => (selectedPackage ? calculatePackageUsageFromClasses(selectedPackage, records) : null),
-    [records, selectedPackage]
+    () => (selectedPackage ? calculatePackageUsageFromClasses(selectedPackage, records, packageItems) : null),
+    [packageItems, records, selectedPackage]
   );
+  const selectedPackageItemUsage = useMemo<PackageItemUsage | null>(() => (selectedPackageItem ? calculatePackageItemUsage(selectedPackageItem, records) : null), [records, selectedPackageItem]);
   const overuseWarning = useMemo(() => {
     if (!selectedPackageUsage) return "";
     return buildOveruseWarning(Number(form.hours || 0), selectedPackageUsage.remainingSessions);
@@ -123,11 +130,18 @@ export function QuickClassForm({ initialQuery = {} }: { initialQuery?: ClassPref
         next.member_id = derived.member_id ?? next.member_id;
         next.teacher_id = derived.teacher_id ?? next.teacher_id;
         next.studio_id = derived.studio_id ?? selected?.studio_id ?? next.studio_id;
+        const items = packageItems.filter((item) => item.package_id === value);
+        next.package_item_id = items.length === 1 ? items[0].id : "";
+      }
+      if (name === "package_item_id" && value) {
+        const item = packageItems.find((packageItem) => packageItem.id === value);
+        if (item) next.course_type = item.course_type;
       }
       if (name === "member_id" && value) {
         next.studio_id = members.find((item) => item.id === value)?.studio_id ?? next.studio_id;
       }
       if (name === "member_id" || (name === "course_type" && value !== "private")) next.package_id = "";
+      if (name === "member_id" || (name === "course_type" && value !== "private")) next.package_item_id = "";
       if (name === "course_type" && value !== "private") next.member_id = "";
       if (name === "course_type" && value === "private" && !next.course_name) next.course_name = "私教课";
       return next;
@@ -162,8 +176,9 @@ export function QuickClassForm({ initialQuery = {} }: { initialQuery?: ClassPref
     if (result.data.course_type === "private" && !result.data.package_id && !window.confirm("没有选择课包，工资计算时可能无法按成交单价计算课时费。仍然保存吗？")) {
       return;
     }
-    if (result.data.course_type === "private" && result.data.package_id && selectedPackageUsage) {
-      const warning = buildOveruseWarning(result.data.hours, selectedPackageUsage.remainingSessions);
+    if (result.data.course_type === "private" && result.data.package_id && (selectedPackageItemUsage || selectedPackageUsage)) {
+      const remainingSessions = selectedPackageItemUsage?.remainingSessions ?? selectedPackageUsage?.remainingSessions ?? 0;
+      const warning = buildOveruseWarning(result.data.hours, remainingSessions);
       if (warning && !window.confirm(`${warning}\n\n保存后会超出课包课时，确认继续记录吗？`)) {
         return;
       }
@@ -204,6 +219,7 @@ export function QuickClassForm({ initialQuery = {} }: { initialQuery?: ClassPref
       student_count: String(record.student_count),
       member_id: record.member_id ?? "",
       package_id: record.package_id ?? "",
+      package_item_id: record.package_item_id ?? "",
       manual_fee: record.manual_fee === null ? "" : String(record.manual_fee),
       note: record.note ?? ""
     });
@@ -258,7 +274,8 @@ export function QuickClassForm({ initialQuery = {} }: { initialQuery?: ClassPref
               {isPrivate ? <p className="text-sm text-muted-foreground">私教课建议选择会员和课包，这样可以按成交单价自动计算课时费。</p> : null}
               <Field label="会员" error={errors.member_id}><Select value={form.member_id} onChange={(e) => updateField("member_id", e.target.value)}><option value="">不选择</option>{members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</Select></Field>
               <Field label="课包" error={errors.package_id}><Select value={form.package_id} onChange={(e) => updateField("package_id", e.target.value)}><option value="">不选择</option>{packageOptions.map((p) => <option key={p.id} value={p.id}>{p.package_name} · {p.unit_price.toFixed(0)} 元/节</option>)}</Select></Field>
-              {selectedPackageUsage ? <PackageUsageHint usage={selectedPackageUsage} overuseWarning={overuseWarning} /> : null}
+              {selectedPackageItems.length > 1 ? <Field label="课包项目" error={errors.package_item_id}><Select value={form.package_item_id} onChange={(e) => updateField("package_item_id", e.target.value)}><option value="">请选择项目</option>{selectedPackageItems.map((item) => <option key={item.id} value={item.id}>{item.item_name}｜{item.sessions} 节｜{item.unit_price.toFixed(0)} 元/节</option>)}</Select></Field> : null}
+              {selectedPackageItemUsage ? <PackageItemUsageHint usage={selectedPackageItemUsage} overuseWarning={buildOveruseWarning(Number(form.hours || 0), selectedPackageItemUsage.remainingSessions)} /> : selectedPackageUsage ? <PackageUsageHint usage={selectedPackageUsage} overuseWarning={overuseWarning} /> : null}
             </div>
             <Field label="手动课时费（可选）" error={errors.manual_fee}><Input type="number" min="0" value={form.manual_fee} onChange={(e) => updateField("manual_fee", e.target.value)} /></Field>
             <Field label="备注（可选）" error={errors.note}><Textarea value={form.note} onChange={(e) => updateField("note", e.target.value)} /></Field>
@@ -269,8 +286,26 @@ export function QuickClassForm({ initialQuery = {} }: { initialQuery?: ClassPref
       </Card>
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3"><h2 className="text-base font-semibold">最近课程记录</h2><Select className="w-36 text-sm" value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">全部瑜伽馆</option><option value="unassigned">未归属</option>{studios.map((studio) => <option key={studio.id} value={studio.id}>{studio.name}</option>)}</Select></div>
-        {visibleRecords.length === 0 ? <EmptyState text="还没有课程记录，先记一节课吧～" /> : visibleRecords.slice(0, 12).map((record) => <ClassCard key={record.id} record={record} records={records} studios={studios} members={members} packages={packages} expanded={expandedIds.includes(record.id)} onToggle={() => setExpandedIds((current) => current.includes(record.id) ? current.filter((id) => id !== record.id) : [...current, record.id])} onEdit={startEdit} onDelete={removeRecord} />)}
+        {visibleRecords.length === 0 ? <EmptyState text="还没有课程记录，先记一节课吧～" /> : visibleRecords.slice(0, 12).map((record) => <ClassCard key={record.id} record={record} records={records} studios={studios} members={members} packages={packages} packageItems={packageItems} expanded={expandedIds.includes(record.id)} onToggle={() => setExpandedIds((current) => current.includes(record.id) ? current.filter((id) => id !== record.id) : [...current, record.id])} onEdit={startEdit} onDelete={removeRecord} />)}
       </section>
+    </div>
+  );
+}
+
+function PackageItemUsageHint({ usage, overuseWarning }: { usage: PackageItemUsage; overuseWarning: string }) {
+  const tone = getPackageUsageTone(usage);
+  const progress = usage.totalSessions > 0 ? Math.min(Math.max((usage.usedSessions / usage.totalSessions) * 100, 0), 100) : 0;
+
+  return (
+    <div className="space-y-2 rounded-3xl bg-card/80 p-3">
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-muted-foreground">{usage.itemName}：已上 {usage.usedSessions} / {usage.totalSessions} 节</span>
+        <span className={tone === "error" ? "font-medium text-destructive" : tone === "warning" ? "font-medium text-amber-700" : "font-medium text-primary"}>{getPackageItemUsageLabel(usage)}</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-secondary">
+        <div className="h-full rounded-full bg-primary/70" style={{ width: `${progress}%` }} />
+      </div>
+      <p className={overuseWarning ? "text-sm text-amber-800" : "text-sm text-muted-foreground"}>{overuseWarning || "选择项目后，工资会按这个项目的单节成交价计算～"}</p>
     </div>
   );
 }
@@ -293,12 +328,14 @@ function PackageUsageHint({ usage, overuseWarning }: { usage: PackageUsage; over
   );
 }
 
-function ClassCard({ record, records, studios, members, packages, expanded, onToggle, onEdit, onDelete }: { record: ClassRecord; records: ClassRecord[]; studios: Studio[]; members: Member[]; packages: MemberPackage[]; expanded: boolean; onToggle: () => void; onEdit: (record: ClassRecord) => void; onDelete: (record: ClassRecord) => void }) {
+function ClassCard({ record, records, studios, members, packages, packageItems, expanded, onToggle, onEdit, onDelete }: { record: ClassRecord; records: ClassRecord[]; studios: Studio[]; members: Member[]; packages: MemberPackage[]; packageItems: PackageItem[]; expanded: boolean; onToggle: () => void; onEdit: (record: ClassRecord) => void; onDelete: (record: ClassRecord) => void }) {
   const missingPrivatePackage = record.course_type === "private" && !record.package_id;
   const memberPackage = packages.find((p) => p.id === record.package_id);
-  const usage = memberPackage ? calculatePackageUsageFromClasses(memberPackage, records) : null;
+  const packageItem = packageItems.find((item) => item.id === record.package_item_id);
+  const usage = memberPackage ? calculatePackageUsageFromClasses(memberPackage, records, packageItems) : null;
+  const itemUsage = packageItem ? calculatePackageItemUsage(packageItem, records) : null;
   const summary = buildClassSummary({ record, members, packages, studios, courseTypeLabel: courseTypeLabels[record.course_type] });
-  return <article className="space-y-3 rounded-3xl border border-white/70 bg-card/90 p-4 shadow-sm"><button type="button" className="flex min-h-16 w-full items-start justify-between gap-3 text-left" onClick={onToggle}><div><div className="text-sm text-muted-foreground">{summary.title}</div>{summary.subtitle ? <h3 className="mt-1 font-medium">{summary.subtitle}</h3> : null}<p className="mt-1 text-sm text-primary">{summary.meta}</p></div><div className="flex items-center gap-2"><Badge>{courseTypeLabels[record.course_type]}</Badge>{expanded ? <ChevronUp className="size-5 text-muted-foreground" /> : <ChevronDown className="size-5 text-muted-foreground" />}</div></button>{missingPrivatePackage ? <div className="flex gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-sm text-amber-800"><AlertCircle className="mt-0.5 size-4 shrink-0" />缺少课包，工资计算时可能需要补充。</div> : null}{expanded ? <div className="space-y-3 border-t border-white/70 pt-3 text-sm text-muted-foreground"><div className="grid gap-1"><span>学员人数：{record.student_count}</span>{record.member_id ? <span>会员：{members.find((m) => m.id === record.member_id)?.name ?? ""}</span> : null}{memberPackage ? <span>课包：{memberPackage.package_name}</span> : null}{typeof record.manual_fee === "number" ? <span>手动课时费：¥{record.manual_fee.toFixed(2)}</span> : null}{usage ? <span>课包剩余：{getPackageUsageLabel(usage)}</span> : null}</div>{record.note ? <p className="rounded-2xl bg-muted/70 px-3 py-2">{record.note}</p> : null}<div className="grid grid-cols-2 gap-2"><Button type="button" variant="secondary" size="sm" onClick={() => onEdit(record)}>编辑</Button><Button type="button" variant="outline" size="sm" onClick={() => onDelete(record)}>删除</Button></div></div> : null}</article>;
+  return <article className="space-y-3 rounded-3xl border border-white/70 bg-card/90 p-4 shadow-sm"><button type="button" className="flex min-h-16 w-full items-start justify-between gap-3 text-left" onClick={onToggle}><div><div className="text-sm text-muted-foreground">{summary.title}</div>{summary.subtitle ? <h3 className="mt-1 font-medium">{summary.subtitle}</h3> : null}<p className="mt-1 text-sm text-primary">{summary.meta}</p></div><div className="flex items-center gap-2"><Badge>{courseTypeLabels[record.course_type]}</Badge>{expanded ? <ChevronUp className="size-5 text-muted-foreground" /> : <ChevronDown className="size-5 text-muted-foreground" />}</div></button>{missingPrivatePackage ? <div className="flex gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-sm text-amber-800"><AlertCircle className="mt-0.5 size-4 shrink-0" />缺少课包，工资计算时可能需要补充。</div> : null}{expanded ? <div className="space-y-3 border-t border-white/70 pt-3 text-sm text-muted-foreground"><div className="grid gap-1"><span>学员人数：{record.student_count}</span>{record.member_id ? <span>会员：{members.find((m) => m.id === record.member_id)?.name ?? ""}</span> : null}{memberPackage ? <span>课包：{memberPackage.package_name}</span> : null}{packageItem ? <span>项目：{packageItem.item_name}（¥{packageItem.unit_price.toFixed(2)}/节）</span> : null}{typeof record.manual_fee === "number" ? <span>手动课时费：¥{record.manual_fee.toFixed(2)}</span> : null}{itemUsage ? <span>项目剩余：{getPackageItemUsageLabel(itemUsage)}</span> : usage ? <span>课包剩余：{getPackageUsageLabel(usage)}</span> : null}</div>{record.note ? <p className="rounded-2xl bg-muted/70 px-3 py-2">{record.note}</p> : null}<div className="grid grid-cols-2 gap-2"><Button type="button" variant="secondary" size="sm" onClick={() => onEdit(record)}>编辑</Button><Button type="button" variant="outline" size="sm" onClick={() => onDelete(record)}>删除</Button></div></div> : null}</article>;
 }
 
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {

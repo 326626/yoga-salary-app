@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Leaf } from "lucide-react";
 
 import { BottomTabNav } from "@/components/bottom-tab-nav";
+import { DensityProvider } from "@/components/density-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -28,6 +29,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body>
+        <DensityProvider />
         <div className="min-h-screen">
           <div className="mx-auto min-h-screen max-w-md bg-background/85 shadow-[0_20px_80px_rgba(70,55,42,0.12)] backdrop-blur md:border-x md:border-white/70">
             <header className="sticky top-0 z-40 border-b border-white/70 bg-card/85 backdrop-blur-xl">
@@ -41,7 +43,7 @@ export default function RootLayout({
                 <span className="rounded-full bg-secondary px-3 py-1 text-xs text-secondary-foreground">轻量原型</span>
               </div>
             </header>
-            <main className="px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-5">{children}</main>
+            <main className="app-main px-4 pt-5">{children}</main>
           </div>
           <BottomTabNav />
         </div>

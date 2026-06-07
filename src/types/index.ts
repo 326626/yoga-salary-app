@@ -53,6 +53,21 @@ export type MemberPackage = {
   created_at: string;
 };
 
+export type PackageItem = {
+  id: string;
+  user_id: string;
+  package_id: string;
+  studio_id: string | null;
+  member_id: string | null;
+  item_name: string;
+  course_type: CourseType;
+  sessions: number;
+  unit_price: number;
+  total_amount: number;
+  note: string | null;
+  created_at: string;
+};
+
 export type ClassRecord = {
   id: string;
   user_id: string;
@@ -60,6 +75,7 @@ export type ClassRecord = {
   studio_id: string | null;
   member_id: string | null;
   package_id: string | null;
+  package_item_id?: string | null;
   date: string;
   course_name: string;
   course_type: CourseType;

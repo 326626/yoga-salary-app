@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { buildCreateClassRecordPayload, buildUpdateClassRecordPayload, deleteClassRecord } from "./classes";
 import { buildCreateMemberPayload, buildUpdateMemberPayload } from "./members";
-import { buildCreateMemberPackagePayload, buildUpdateMemberPackagePayload } from "./packages";
+import { buildCreateMemberPackagePayload, buildUpdateMemberPackagePayload, calculateBundlePackagePricing } from "./packages";
+import { buildCreatePackageItemPayload } from "./packageItems";
 import { buildCreatePerformancePayload, buildUpdatePerformancePayload, deletePerformance } from "./performances";
 import { buildCreateSalaryCalculationPayload, buildUpdateSalaryCalculationPayload, deleteSalaryCalculation, findSalaryCalculationByMonthAndStudio } from "./salaryCalculations";
 import { buildCreateSalaryRulePayload } from "./salaryRules";
@@ -136,6 +137,37 @@ describe("data helper payload builders", () => {
     );
 
     expect(payload.user_id).toBe(trustedUserId);
+  });
+
+  it("forces package item user_id to current user", () => {
+    const payload = buildCreatePackageItemPayload(
+      {
+        user_id: maliciousUserId,
+        package_id: "44444444-4444-4444-8444-444444444401",
+        studio_id: "99999999-9999-4999-8999-999999999901",
+        member_id: "33333333-3333-4333-8333-333333333301",
+        item_name: "理疗私教",
+        course_type: "private",
+        sessions: 2,
+        unit_price: 500,
+        note: ""
+      },
+      trustedUserId
+    );
+
+    expect(payload.user_id).toBe(trustedUserId);
+    expect(payload.total_amount).toBe(1000);
+  });
+
+  it("summarizes bundle package pricing from items", () => {
+    const pricing = calculateBundlePackagePricing([
+      { item_name: "私教", course_type: "private", sessions: 8, unit_price: 300 },
+      { item_name: "理疗", course_type: "private", sessions: 2, unit_price: 500 }
+    ]);
+
+    expect(pricing.total_sessions).toBe(10);
+    expect(pricing.total_amount).toBe(3400);
+    expect(pricing.unit_price).toBe(340);
   });
 
   it("keeps salary rule studio_id while forcing user_id", () => {

@@ -1,4 +1,4 @@
-import type { ClassRecord, MemberPackage, StructuredSalaryRule } from "@/types";
+import type { ClassRecord, MemberPackage, PackageItem, StructuredSalaryRule } from "@/types";
 
 import { formatMoney, roundMoney } from "./formatMoney";
 
@@ -9,6 +9,7 @@ export type ClassFeeBreakdownItem = {
   courseType: string;
   memberId?: string;
   packageId?: string;
+  packageItemId?: string;
   formula: string;
   amount: number;
   warning?: string;
@@ -23,6 +24,7 @@ export type CalculateClassFeeResult = {
 type CalculateClassFeeInput = {
   classes: ClassRecord[];
   packages: MemberPackage[];
+  packageItems?: PackageItem[];
   salaryRule: StructuredSalaryRule;
 };
 
@@ -34,7 +36,7 @@ function buildInvalidPackageWarning(classRecord: ClassRecord) {
   return `${classRecord.date} 私教课课包单节成交价无效，无法按单节成交价计算课时费。`;
 }
 
-export function calculateClassFee({ classes, packages, salaryRule }: CalculateClassFeeInput): CalculateClassFeeResult {
+export function calculateClassFee({ classes, packages, packageItems = [], salaryRule }: CalculateClassFeeInput): CalculateClassFeeResult {
   const warnings: string[] = [];
 
   const classFees = classes.map((classRecord): ClassFeeBreakdownItem => {
@@ -44,7 +46,8 @@ export function calculateClassFee({ classes, packages, salaryRule }: CalculateCl
       courseName: classRecord.course_name,
       courseType: classRecord.course_type,
       memberId: classRecord.member_id ?? undefined,
-      packageId: classRecord.package_id ?? undefined
+      packageId: classRecord.package_id ?? undefined,
+      packageItemId: classRecord.package_item_id ?? undefined
     };
     const rule = salaryRule.class_fee_rules.find((item) => item.course_type === classRecord.course_type);
 
@@ -85,11 +88,15 @@ export function calculateClassFee({ classes, packages, salaryRule }: CalculateCl
       };
     }
 
+    const packageItem = classRecord.package_item_id
+      ? packageItems.find((item) => item.id === classRecord.package_item_id)
+      : undefined;
     const memberPackage = classRecord.package_id
       ? packages.find((item) => item.id === classRecord.package_id)
       : undefined;
+    const unitPrice = packageItem?.unit_price ?? memberPackage?.unit_price;
 
-    if (!memberPackage) {
+    if (!memberPackage && !packageItem) {
       const warning = buildMissingPackageWarning(classRecord);
       warnings.push(warning);
       return {
@@ -100,7 +107,7 @@ export function calculateClassFee({ classes, packages, salaryRule }: CalculateCl
       };
     }
 
-    if (memberPackage.unit_price <= 0) {
+    if (!unitPrice || unitPrice <= 0) {
       const warning = buildInvalidPackageWarning(classRecord);
       warnings.push(warning);
       return {
@@ -111,10 +118,10 @@ export function calculateClassFee({ classes, packages, salaryRule }: CalculateCl
       };
     }
 
-    const amount = roundMoney(memberPackage.unit_price * rule.rate * classRecord.hours);
+    const amount = roundMoney(unitPrice * rule.rate * classRecord.hours);
     return {
       ...baseItem,
-      formula: `${formatMoney(memberPackage.unit_price)} 元 × ${rule.rate * 100}% × ${classRecord.hours} = ${formatMoney(amount)} 元`,
+      formula: `${formatMoney(unitPrice)} 元 × ${rule.rate * 100}% × ${classRecord.hours} = ${formatMoney(amount)} 元`,
       amount
     };
   });

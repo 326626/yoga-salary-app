@@ -6,7 +6,7 @@ import type { User } from "@supabase/supabase-js";
 import { BookOpenCheck, Building2, Dumbbell, ReceiptText, Settings2, UserRound, WalletCards } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { listClasses, listPackages, listPerformances, listSalaryCalculations, listSalaryRules, listTeachers } from "@/lib/data";
+import { listClasses, listPackageItems, listPackages, listPerformances, listSalaryCalculations, listSalaryRules, listTeachers } from "@/lib/data";
 import { mockClasses, mockPackages, mockPerformances, mockSalaryCalculations, mockSalaryRules, mockTeachers } from "@/lib/mock-data";
 import { buildHomeMonthOverview, type HomeMonthOverview } from "@/lib/home/monthOverview";
 import { formatMoney } from "@/lib/salary/formatMoney";
@@ -58,11 +58,12 @@ export function HomePageClient() {
         setMessage("登录后可以查看你的真实本月概览～");
         return;
       }
-      const [teachers, classes, performances, packages, salaryRules, salaryCalculations] = await Promise.all([
+      const [teachers, classes, performances, packages, packageItems, salaryRules, salaryCalculations] = await Promise.all([
         listTeachers(supabase, currentUser.id),
         listClasses(supabase, currentUser.id),
         listPerformances(supabase, currentUser.id),
         listPackages(supabase, currentUser.id),
+        listPackageItems(supabase, currentUser.id),
         listSalaryRules(supabase, currentUser.id),
         listSalaryCalculations(supabase, currentUser.id)
       ]);
@@ -74,6 +75,7 @@ export function HomePageClient() {
         classes,
         performances,
         packages,
+        packageItems,
         activeSalaryRule: selectedRule.rule,
         salaryCalculations
       });

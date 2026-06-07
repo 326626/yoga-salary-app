@@ -24,6 +24,30 @@
     --input: 26 34% 86%;
     --ring: 168 38% 34%;
     --radius: 1.25rem;
+    --app-font-scale: 0.96;
+    --app-control-height: 2.75rem;
+    --app-control-height-sm: 2.5rem;
+    --app-control-height-icon: 2.75rem;
+    --app-card-padding: 1rem;
+    --app-tab-height: 3.1rem;
+  }
+
+  :root[data-density="compact"] {
+    --app-font-scale: 0.92;
+    --app-control-height: 2.55rem;
+    --app-control-height-sm: 2.35rem;
+    --app-control-height-icon: 2.55rem;
+    --app-card-padding: 0.85rem;
+    --app-tab-height: 2.85rem;
+  }
+
+  :root[data-density="comfortable"] {
+    --app-font-scale: 1;
+    --app-control-height: 3rem;
+    --app-control-height-sm: 2.75rem;
+    --app-control-height-icon: 3rem;
+    --app-card-padding: 1.15rem;
+    --app-tab-height: 3.35rem;
   }
 
   * {
@@ -32,6 +56,7 @@
 
   body {
     @apply bg-background text-foreground antialiased;
+    font-size: calc(16px * var(--app-font-scale));
     background:
       radial-gradient(circle at top left, hsl(342 62% 94%) 0, transparent 34rem),
       radial-gradient(circle at bottom right, hsl(136 40% 92%) 0, transparent 28rem),
@@ -43,5 +68,9 @@
   textarea,
   button {
     font: inherit;
+  }
+
+  .app-main {
+    padding-bottom: calc(6.75rem + env(safe-area-inset-bottom));
   }
 }

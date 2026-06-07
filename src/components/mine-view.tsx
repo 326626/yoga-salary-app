@@ -8,10 +8,12 @@ import { Archive, Dumbbell, LogOut, MapPin, ReceiptText, Settings2, UserRound } 
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { applyDisplayDensity, displayDensityStorageKey } from "@/components/density-provider";
 import { Feedback } from "@/components/ui/feedback";
 import { createDefaultTeacher, listTeachers } from "@/lib/data";
 import { signOut } from "@/lib/supabase/auth";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { defaultDisplayDensity, displayDensities, displayDensityLabels, type DisplayDensity } from "@/lib/ui/density";
 import type { Teacher } from "@/types";
 
 const links = [
@@ -29,8 +31,12 @@ export function MineView() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [density, setDensity] = useState<DisplayDensity>(defaultDisplayDensity);
 
   useEffect(() => {
+    const storedDensity = window.localStorage.getItem(displayDensityStorageKey);
+    setDensity(applyDisplayDensity(storedDensity ?? defaultDisplayDensity));
+
     if (!isSupabaseConfigured()) {
       setLoading(false);
       return;
@@ -46,6 +52,11 @@ export function MineView() {
       setLoading(false);
     });
   }, []);
+
+  function handleDensityChange(nextDensity: DisplayDensity) {
+    window.localStorage.setItem(displayDensityStorageKey, nextDensity);
+    setDensity(applyDisplayDensity(nextDensity));
+  }
 
   async function handleCreateDefaultTeacher() {
     if (!user) return;
@@ -91,10 +102,6 @@ export function MineView() {
                 <Button className="w-full" onClick={handleCreateDefaultTeacher}>创建我的档案</Button>
               </div>
             ) : null}
-            <Button variant="outline" className="w-full" onClick={handleSignOut}>
-              <LogOut className="mr-2 size-4" aria-hidden="true" />
-              退出登录
-            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -116,6 +123,35 @@ export function MineView() {
           </Link>
         ))}
       </div>
+      <Card>
+        <CardContent className="space-y-3 p-4">
+          <div>
+            <div className="text-sm font-medium">显示大小</div>
+            <p className="mt-1 text-xs text-muted-foreground">根据手机屏幕和使用习惯调整页面疏密。</p>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {displayDensities.map((item) => (
+              <Button
+                key={item}
+                type="button"
+                variant={density === item ? "default" : "secondary"}
+                size="sm"
+                onClick={() => handleDensityChange(item)}
+              >
+                {displayDensityLabels[item]}
+              </Button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+      {user ? (
+        <div className="pt-8">
+          <Button variant="outline" className="w-full" onClick={handleSignOut}>
+            <LogOut className="mr-2 size-4" aria-hidden="true" />
+            退出登录
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

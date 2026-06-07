@@ -11,6 +11,7 @@ import {
   updateClassRecordInputSchema,
   updatePerformanceInputSchema,
   memberPackageSchema,
+  packageItemSchema,
   salaryCalculationSchema,
   salaryRuleSchema,
   structuredSalaryRuleSchema
@@ -160,6 +161,25 @@ describe("core business schemas", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it("accepts valid package item records", () => {
+    const result = packageItemSchema.safeParse({
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+      user_id: "11111111-1111-4111-8111-111111111111",
+      package_id: "44444444-4444-4444-8444-444444444401",
+      studio_id: "99999999-9999-4999-8999-999999999901",
+      member_id: "33333333-3333-4333-8333-333333333301",
+      item_name: "理疗私教",
+      course_type: "private",
+      sessions: 2,
+      unit_price: 500,
+      total_amount: 1000,
+      note: null,
+      created_at: "2026-06-01T00:00:00.000Z"
+    });
+
+    expect(result.success).toBe(true);
   });
 
   it("rejects invalid month format", () => {
@@ -371,6 +391,45 @@ describe("core business schemas", () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  it("accepts bundle package input with multiple items", () => {
+    const result = createMemberPackageInputSchema.safeParse({
+      package_mode: "bundle",
+      member_id: "33333333-3333-4333-8333-333333333301",
+      teacher_id: "",
+      studio_id: "99999999-9999-4999-8999-999999999901",
+      package_name: "私教组合包",
+      course_type: "private",
+      total_amount: "3400",
+      total_sessions: "10",
+      purchase_date: "2026-06-10",
+      note: "",
+      items: [
+        { item_name: "私教", course_type: "private", sessions: "8", unit_price: "300", note: "" },
+        { item_name: "理疗", course_type: "private", sessions: "2", unit_price: "500", note: "" }
+      ]
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects bundle package input without items", () => {
+    const result = createMemberPackageInputSchema.safeParse({
+      package_mode: "bundle",
+      member_id: "33333333-3333-4333-8333-333333333301",
+      teacher_id: "",
+      studio_id: "99999999-9999-4999-8999-999999999901",
+      package_name: "私教组合包",
+      course_type: "private",
+      total_amount: "3400",
+      total_sessions: "10",
+      purchase_date: "2026-06-10",
+      note: "",
+      items: []
+    });
+
+    expect(result.success).toBe(false);
   });
 
   it("rejects package form input with non-positive total sessions", () => {

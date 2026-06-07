@@ -50,6 +50,25 @@ create table if not exists public.packages (
   constraint packages_course_type_valid check (course_type in ('group', 'private', 'trial', 'substitute', 'other'))
 );
 
+create table if not exists public.package_items (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  package_id uuid not null references public.packages(id) on delete cascade,
+  studio_id uuid references public.studios(id),
+  member_id uuid references public.members(id),
+  item_name text not null,
+  course_type text not null,
+  sessions numeric not null,
+  unit_price numeric not null,
+  total_amount numeric not null,
+  note text,
+  created_at timestamptz default now(),
+  constraint package_items_sessions_positive check (sessions > 0),
+  constraint package_items_unit_price_nonnegative check (unit_price >= 0),
+  constraint package_items_total_amount_nonnegative check (total_amount >= 0),
+  constraint package_items_course_type_valid check (course_type in ('group', 'private', 'trial', 'substitute', 'other'))
+);
+
 create table if not exists public.classes (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,
@@ -57,6 +76,7 @@ create table if not exists public.classes (
   studio_id uuid references public.studios(id),
   member_id uuid references public.members(id),
   package_id uuid references public.packages(id),
+  package_item_id uuid references public.package_items(id),
   date date not null,
   course_name text not null,
   course_type text not null,
@@ -136,6 +156,7 @@ alter table public.teachers enable row level security;
 alter table public.studios enable row level security;
 alter table public.members enable row level security;
 alter table public.packages enable row level security;
+alter table public.package_items enable row level security;
 alter table public.classes enable row level security;
 alter table public.performances enable row level security;
 alter table public.salary_rules enable row level security;
@@ -160,6 +181,11 @@ create policy "packages_select_own" on public.packages for select using (auth.ui
 create policy "packages_insert_own" on public.packages for insert with check (auth.uid() = user_id);
 create policy "packages_update_own" on public.packages for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "packages_delete_own" on public.packages for delete using (auth.uid() = user_id);
+
+create policy "package_items_select_own" on public.package_items for select using (auth.uid() = user_id);
+create policy "package_items_insert_own" on public.package_items for insert with check (auth.uid() = user_id);
+create policy "package_items_update_own" on public.package_items for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "package_items_delete_own" on public.package_items for delete using (auth.uid() = user_id);
 
 create policy "classes_select_own" on public.classes for select using (auth.uid() = user_id);
 create policy "classes_insert_own" on public.classes for insert with check (auth.uid() = user_id);

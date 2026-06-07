@@ -14,14 +14,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { calculatePackageUsageFromClasses, calculateTotalAmount, calculateUnitPrice, countPackageRelations, createMemberPackage, deleteMemberPackage, listClasses, listMembers, listPackages, listStudios, updateMemberPackage, type PackageUsage } from "@/lib/data";
+import { calculateBundlePackagePricing, calculatePackageUsageFromClasses, calculateTotalAmount, calculateUnitPrice, countPackageRelations, createMemberPackage, deleteMemberPackage, listClasses, listMembers, listPackageItems, listPackages, listStudios, updateMemberPackage, type PackageUsage } from "@/lib/data";
 import { mockClasses, mockMembers, mockPackages, mockStudios } from "@/lib/mock-data";
 import { getPackageUsageLabel, getPackageUsageTone } from "@/lib/packages/usageDisplay";
+import { filterPackagesByStudioAndMember, getPackageFilterEmptyMessage, type PackageStudioFilter } from "@/lib/packages/packageFilters";
 import { getPackageDeletePrompt } from "@/lib/relationPrompts";
 import { buildPackageSummary } from "@/lib/records/recordSummaries";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { createMemberPackageInputSchema } from "@/lib/validation";
-import type { ClassRecord, CourseType, Member, MemberPackage, Studio } from "@/types";
+import type { ClassRecord, CourseType, Member, MemberPackage, PackageItem, Studio } from "@/types";
 
 type PackageForm = Omit<z.input<typeof createMemberPackageInputSchema>, "total_amount" | "total_sessions"> & {
   total_amount: string;
@@ -39,6 +40,7 @@ const courseTypeLabels: Record<CourseType, string> = {
 };
 const todayString = () => new Date().toISOString().slice(0, 10);
 const initialForm = (): PackageForm => ({
+  package_mode: "single",
   member_id: mockMembers[0]?.id ?? "",
   teacher_id: "",
   studio_id: mockStudios[0]?.id ?? "",
@@ -49,19 +51,26 @@ const initialForm = (): PackageForm => ({
   unit_price: "",
   total_sessions: "",
   purchase_date: todayString(),
-  note: ""
+  note: "",
+  items: []
 });
+
+const emptyPackageItem = () => ({ item_name: "", course_type: "private" as CourseType, sessions: "", unit_price: "", note: "" });
 
 export function PackagesManager({ initialMemberId, initialEditId, initialStudioId }: { initialMemberId?: string; initialEditId?: string; initialStudioId?: string }) {
   const [user, setUser] = useState<User | null>(null);
   const [members, setMembers] = useState<Member[]>(mockMembers);
   const [studios, setStudios] = useState<Studio[]>(mockStudios);
   const [packages, setPackages] = useState<MemberPackage[]>(mockPackages);
+  const [packageItems, setPackageItems] = useState<PackageItem[]>([]);
+  const [bundleItems, setBundleItems] = useState<Array<ReturnType<typeof emptyPackageItem>>>([emptyPackageItem()]);
   const [classes, setClasses] = useState<ClassRecord[]>(mockClasses);
   const [form, setForm] = useState<PackageForm>(initialForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(Boolean(initialMemberId || initialEditId));
   const [expandedIds, setExpandedIds] = useState<string[]>([]);
+  const [studioFilter, setStudioFilter] = useState<PackageStudioFilter>("all");
+  const [memberFilter, setMemberFilter] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [feedback, setFeedback] = useState("");
   const [tone, setTone] = useState<"success" | "warning" | "error">("success");
@@ -73,15 +82,17 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
       const currentUser = data.session?.user ?? null;
       setUser(currentUser);
       if (!currentUser) return;
-      const [realMembers, realStudios, realPackages, realClasses] = await Promise.all([
+      const [realMembers, realStudios, realPackages, realPackageItems, realClasses] = await Promise.all([
         listMembers(supabase, currentUser.id),
         listStudios(supabase, currentUser.id),
         listPackages(supabase, currentUser.id),
+        listPackageItems(supabase, currentUser.id),
         listClasses(supabase, currentUser.id)
       ]);
       setMembers(realMembers);
       setStudios(realStudios);
       setPackages(realPackages);
+      setPackageItems(realPackageItems);
       setClasses(realClasses);
       const preferredMemberId = realMembers.some((member) => member.id === initialMemberId) ? initialMemberId : realMembers[0]?.id;
       const preferredStudioId = realStudios.some((studio) => studio.id === initialStudioId) ? initialStudioId : realStudios[0]?.id;
@@ -130,8 +141,12 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
     return Number.isFinite(totalAmount) ? totalAmount : 0;
   }, [form.pricing_mode, form.total_amount, form.total_sessions, form.unit_price]);
   const usages = useMemo(
-    () => Object.fromEntries(packages.map((item) => [item.id, calculatePackageUsageFromClasses(item, classes)])),
-    [classes, packages]
+    () => Object.fromEntries(packages.map((item) => [item.id, calculatePackageUsageFromClasses(item, classes, packageItems)])),
+    [classes, packageItems, packages]
+  );
+  const visiblePackages = useMemo(
+    () => filterPackagesByStudioAndMember(packages, studioFilter, memberFilter),
+    [memberFilter, packages, studioFilter]
   );
 
   function updateField(name: keyof PackageForm, value: string) {
@@ -151,6 +166,7 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
     setIsFormOpen(true);
     setForm({
       member_id: item.member_id,
+      package_mode: "single",
       teacher_id: item.teacher_id ?? "",
       studio_id: item.studio_id ?? "",
       pricing_mode: "total_amount",
@@ -160,21 +176,38 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
       unit_price: String(item.unit_price),
       total_sessions: String(item.total_sessions),
       purchase_date: item.purchase_date,
-      note: item.note ?? ""
+      note: item.note ?? "",
+      items: []
     });
+    setBundleItems([emptyPackageItem()]);
     setFeedback("");
   }
 
   function resetForm() {
     setEditingId(null);
     setForm({ ...initialForm(), member_id: members[0]?.id ?? "", studio_id: members[0]?.studio_id ?? studios[0]?.id ?? "" });
+    setBundleItems([emptyPackageItem()]);
     setErrors({});
     setIsFormOpen(false);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const result = createMemberPackageInputSchema.safeParse(form);
+    const bundlePricing = calculateBundlePackagePricing(bundleItems.map((item) => ({
+      item_name: item.item_name,
+      course_type: item.course_type,
+      sessions: Number(item.sessions || 0),
+      unit_price: Number(item.unit_price || 0),
+      note: item.note
+    })));
+    const submission = {
+      ...form,
+      total_amount: form.package_mode === "bundle" ? String(bundlePricing.total_amount) : form.total_amount,
+      total_sessions: form.package_mode === "bundle" ? String(bundlePricing.total_sessions) : form.total_sessions,
+      unit_price: form.package_mode === "bundle" ? String(bundlePricing.unit_price) : form.unit_price,
+      items: form.package_mode === "bundle" ? bundleItems.map((item) => ({ ...item, sessions: item.sessions, unit_price: item.unit_price })) : undefined
+    };
+    const result = createMemberPackageInputSchema.safeParse(submission);
     if (!result.success) {
       const nextErrors: FieldErrors = {};
       for (const issue of result.error.issues) nextErrors[issue.path[0] as keyof FieldErrors] = friendlyError(issue.path[0] as keyof FieldErrors, issue.message);
@@ -196,6 +229,7 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
       } else {
         const created = await createMemberPackage(supabase, user.id, result.data);
         setPackages((current) => [created, ...current]);
+        setPackageItems(await listPackageItems(supabase, user.id));
         setFeedback("课包已添加～");
       }
       setTone("success");
@@ -204,6 +238,18 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
       setTone("error");
       setFeedback("保存失败，请稍后再试～");
     }
+  }
+
+  function updateBundleItem(index: number, field: keyof ReturnType<typeof emptyPackageItem>, value: string) {
+    setBundleItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item));
+  }
+
+  function addBundleItem() {
+    setBundleItems((current) => [...current, emptyPackageItem()]);
+  }
+
+  function removeBundleItem(index: number) {
+    setBundleItems((current) => current.length > 1 ? current.filter((_, itemIndex) => itemIndex !== index) : current);
   }
 
   async function removePackage(item: MemberPackage) {
@@ -287,12 +333,19 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
             <Field label="课包名称" error={errors.package_name}>
               <Input value={form.package_name} placeholder="例如：私教 10 节" onChange={(event) => updateField("package_name", event.target.value)} />
             </Field>
+            <Field label="课包类型">
+              <Select value={form.package_mode ?? "single"} onChange={(event) => updateField("package_mode", event.target.value)}>
+                <option value="single">单一课包</option>
+                <option value="bundle">组合课包</option>
+              </Select>
+            </Field>
             <Field label="这个课包属于哪个瑜伽馆？" error={errors.studio_id}>
               <Select value={form.studio_id ?? ""} onChange={(event) => updateField("studio_id", event.target.value)}>
                 <option value="">不选择</option>
                 {studios.map((studio) => <option key={studio.id} value={studio.id}>{studio.name}</option>)}
               </Select>
             </Field>
+            {(form.package_mode ?? "single") === "single" ? <>
             <div className="grid grid-cols-2 gap-3">
               <Field label="课程类型" error={errors.course_type}>
                 <Select value={form.course_type} onChange={(event) => updateField("course_type", event.target.value)}>
@@ -327,6 +380,7 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
             <div className="rounded-3xl bg-accent px-4 py-3 text-sm text-primary">
               总成交金额：<span className="font-semibold">¥{totalAmountPreview.toFixed(2)}</span> · 单节成交价：<span className="font-semibold">¥{unitPricePreview.toFixed(2)}</span>
             </div>
+            </> : <BundleItemsEditor items={bundleItems} onChange={updateBundleItem} onAdd={addBundleItem} onRemove={removeBundleItem} />}
             <Field label="购买日期" error={errors.purchase_date}>
               <Input type="date" value={form.purchase_date} onChange={(event) => updateField("purchase_date", event.target.value)} />
             </Field>
@@ -353,10 +407,21 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
 
       <section className="space-y-3">
         <h2 className="text-base font-semibold">课包列表</h2>
-        {packages.length === 0 ? (
-          <EmptyState text="还没有课包，私教课建议先添加课包～" />
+        <div className="grid grid-cols-2 gap-3">
+          <Select value={studioFilter} onChange={(event) => setStudioFilter(event.target.value)}>
+            <option value="all">全部瑜伽馆</option>
+            <option value="unassigned">未归属</option>
+            {studios.map((studio) => <option key={studio.id} value={studio.id}>{studio.name}</option>)}
+          </Select>
+          <Select value={memberFilter} onChange={(event) => setMemberFilter(event.target.value)}>
+            <option value="">全部会员</option>
+            {members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
+          </Select>
+        </div>
+        {visiblePackages.length === 0 ? (
+          <EmptyState text={getPackageFilterEmptyMessage(studioFilter, memberFilter)} />
         ) : (
-            packages.map((item) => <PackageCard key={item.id} item={item} members={members} studios={studios} usage={usages[item.id]} classes={classes} expanded={expandedIds.includes(item.id)} onToggle={() => setExpandedIds((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} onEdit={startEdit} onDelete={removePackage} />)
+            visiblePackages.map((item) => <PackageCard key={item.id} item={item} items={packageItems.filter((packageItem) => packageItem.package_id === item.id)} members={members} studios={studios} usage={usages[item.id]} classes={classes} expanded={expandedIds.includes(item.id)} onToggle={() => setExpandedIds((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} onEdit={startEdit} onDelete={removePackage} />)
         )}
       </section>
     </div>
@@ -365,6 +430,7 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
 
 function PackageCard({
   item,
+  items,
   members,
   studios,
   usage,
@@ -375,6 +441,7 @@ function PackageCard({
   onDelete
 }: {
   item: MemberPackage;
+  items: PackageItem[];
   members: Member[];
   studios: Studio[];
   usage?: PackageUsage;
@@ -386,6 +453,7 @@ function PackageCard({
 }) {
   const summary = buildPackageSummary({ item, members, studios, remainingLabel: usage ? getPackageUsageLabel(usage) : "未统计" });
   const relatedClasses = classes.filter((record) => record.package_id === item.id).slice(0, 3);
+  const isBundle = items.length > 1;
 
   return (
     <article className="space-y-4 rounded-3xl border border-white/70 bg-card/90 p-4 shadow-sm">
@@ -393,7 +461,7 @@ function PackageCard({
         <div>
           <p className="text-sm text-muted-foreground">{summary.title}</p>
           <h3 className="mt-1 font-medium text-foreground">{summary.subtitle}</h3>
-          <p className="mt-1 text-sm font-medium text-primary">{summary.meta}</p>
+          <p className="mt-1 text-sm font-medium text-primary">{isBundle ? `组合课包｜${items.length} 个项目｜多项目不同单价` : summary.meta}</p>
         </div>
         {expanded ? <ChevronUp className="mt-1 size-5 text-muted-foreground" /> : <ChevronDown className="mt-1 size-5 text-muted-foreground" />}
       </button>
@@ -409,6 +477,15 @@ function PackageCard({
             <AmountPill label="总课时" value={`${item.total_sessions}`} />
             <AmountPill label="已上" value={`${usage?.usedSessions ?? 0}`} />
           </div>
+          {items.length > 0 ? (
+            <div className="space-y-2 rounded-3xl bg-muted/70 p-3">
+              <div className="text-sm font-medium">课包项目</div>
+              {items.map((packageItem) => {
+                const itemUsage = usage?.itemUsages?.find((usageItem) => usageItem.packageItemId === packageItem.id);
+                return <div key={packageItem.id} className="rounded-2xl bg-card/80 px-3 py-2 text-sm text-muted-foreground">{packageItem.item_name} · {packageItem.sessions} 节 · ¥{packageItem.unit_price.toFixed(2)}/节{itemUsage ? ` · ${getPackageUsageLabel(itemUsage)}` : ""}</div>;
+              })}
+            </div>
+          ) : null}
           {relatedClasses.length > 0 ? (
             <div className="rounded-3xl bg-secondary/70 p-3 text-sm text-muted-foreground">
               <div className="mb-2 font-medium text-foreground">最近消课</div>
@@ -428,6 +505,37 @@ function PackageCard({
         </div>
       ) : null}
     </article>
+  );
+}
+
+function BundleItemsEditor({ items, onChange, onAdd, onRemove }: { items: Array<ReturnType<typeof emptyPackageItem>>; onChange: (index: number, field: keyof ReturnType<typeof emptyPackageItem>, value: string) => void; onAdd: () => void; onRemove: (index: number) => void }) {
+  const totalSessions = items.reduce((sum, item) => sum + Number(item.sessions || 0), 0);
+  const totalAmount = items.reduce((sum, item) => sum + Number(item.sessions || 0) * Number(item.unit_price || 0), 0);
+  const averagePrice = totalSessions > 0 ? totalAmount / totalSessions : 0;
+
+  return (
+    <div className="space-y-3 rounded-3xl bg-secondary/70 p-3">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-medium">组合课包项目</div>
+        <Button type="button" size="sm" variant="secondary" onClick={onAdd}>添加项目</Button>
+      </div>
+      {items.map((item, index) => (
+        <div key={index} className="space-y-3 rounded-3xl bg-card/80 p-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="项目名称"><Input value={item.item_name} placeholder="私教课" onChange={(event) => onChange(index, "item_name", event.target.value)} /></Field>
+            <Field label="课程类型"><Select value={item.course_type} onChange={(event) => onChange(index, "course_type", event.target.value)}>{Object.entries(courseTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select></Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="课时数"><Input type="number" inputMode="decimal" value={item.sessions} onChange={(event) => onChange(index, "sessions", event.target.value)} /></Field>
+            <Field label="客单价"><Input type="number" inputMode="decimal" value={item.unit_price} onChange={(event) => onChange(index, "unit_price", event.target.value)} /></Field>
+          </div>
+          <div className="text-sm text-primary">项目金额：¥{(Number(item.sessions || 0) * Number(item.unit_price || 0)).toFixed(2)}</div>
+          <Field label="备注（可选）"><Input value={item.note} onChange={(event) => onChange(index, "note", event.target.value)} /></Field>
+          {items.length > 1 ? <Button type="button" size="sm" variant="outline" onClick={() => onRemove(index)}>删除这个项目</Button> : null}
+        </div>
+      ))}
+      <div className="rounded-2xl bg-accent px-3 py-2 text-sm text-primary">合计：¥{totalAmount.toFixed(2)} · {totalSessions} 节 · 平均 ¥{averagePrice.toFixed(2)}/节</div>
+    </div>
   );
 }
 

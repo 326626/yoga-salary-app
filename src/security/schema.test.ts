@@ -8,6 +8,7 @@ const tables = [
   "studios",
   "members",
   "packages",
+  "package_items",
   "classes",
   "performances",
   "salary_rules",

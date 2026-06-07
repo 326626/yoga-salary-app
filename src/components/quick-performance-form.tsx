@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { createPerformance, deletePerformance, listMembers, listPackages, listPerformances, listStudios, listTeachers, updatePerformance } from "@/lib/data";
 import { mockMembers, mockPackages, mockPerformances, mockStudios, mockTeachers } from "@/lib/mock-data";
+import { derivePerformancePackageSelection, filterPerformancePackagesForMember } from "@/lib/performances/packageLinkage";
 import { filterPerformancesByStudio, type StudioRecordFilter } from "@/lib/records/recordFilters";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { createPerformanceInputSchema } from "@/lib/validation";
@@ -27,7 +28,7 @@ type FieldErrors = Partial<Record<keyof z.infer<typeof createPerformanceInputSch
 const todayString = () => new Date().toISOString().slice(0, 10);
 const initialForm = { date: todayString(), teacher_id: mockTeachers[0]?.id ?? "", studio_id: mockStudios[0]?.id ?? "", type: "new_card", amount: "", customer_name: "", member_id: "", package_id: "", commissionable: true, note: "" };
 
-export function QuickPerformanceForm({ initialStudioId }: { initialStudioId?: string }) {
+export function QuickPerformanceForm({ initialStudioId, initialMemberId, initialPackageId }: { initialStudioId?: string; initialMemberId?: string; initialPackageId?: string }) {
   const [user, setUser] = useState<User | null>(null);
   const [teachers, setTeachers] = useState<Teacher[]>(mockTeachers);
   const [studios, setStudios] = useState<Studio[]>(mockStudios);
@@ -40,6 +41,7 @@ export function QuickPerformanceForm({ initialStudioId }: { initialStudioId?: st
   const [tone, setTone] = useState<"success" | "warning" | "error">("success");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<StudioRecordFilter>("all");
+  const [amountTouched, setAmountTouched] = useState(false);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
@@ -60,14 +62,21 @@ export function QuickPerformanceForm({ initialStudioId }: { initialStudioId?: st
       setMembers(realMembers);
       setPackages(realPackages);
       setRecords(realPerformances);
-      const preferredStudioId = realStudios.some((studio) => studio.id === initialStudioId) ? initialStudioId : realStudios[0]?.id;
-      setForm((current) => ({ ...current, teacher_id: realTeachers[0]?.id ?? "", studio_id: preferredStudioId ?? "" }));
+      const preferredMemberId = realMembers.some((member) => member.id === initialMemberId) ? initialMemberId : "";
+      const preferredPackage = realPackages.find((item) => item.id === initialPackageId);
+      const preferredStudioId = preferredPackage?.studio_id ?? realMembers.find((member) => member.id === preferredMemberId)?.studio_id ?? (realStudios.some((studio) => studio.id === initialStudioId) ? initialStudioId : realStudios[0]?.id);
+      setForm((current) => {
+        const base = { ...current, teacher_id: realTeachers[0]?.id ?? "", studio_id: preferredStudioId ?? "", member_id: preferredMemberId ?? "" };
+        return preferredPackage
+          ? { ...base, package_id: preferredPackage.id, member_id: preferredPackage.member_id, studio_id: preferredPackage.studio_id ?? base.studio_id, amount: String(preferredPackage.total_amount), customer_name: realMembers.find((member) => member.id === preferredPackage.member_id)?.name ?? base.customer_name }
+          : base;
+      });
       setFilter(realStudios.some((studio) => studio.id === initialStudioId) ? initialStudioId ?? "all" : "all");
     }).catch(() => {
       setTone("error");
       setFeedback("网络好像开小差了，请再试一次～");
     });
-  }, [initialStudioId]);
+  }, [initialMemberId, initialPackageId, initialStudioId]);
 
   useEffect(() => {
     if (user) return;
@@ -83,15 +92,30 @@ export function QuickPerformanceForm({ initialStudioId }: { initialStudioId?: st
         next.studio_id = members.find((item) => item.id === value)?.studio_id ?? next.studio_id;
       }
       if (name === "package_id" && typeof value === "string") {
-        const selected = packages.find((item) => item.id === value);
-        next.member_id = selected?.member_id ?? next.member_id;
-        next.studio_id = selected?.studio_id ?? next.studio_id;
+        const derived = derivePerformancePackageSelection({
+          packageId: value,
+          packages,
+          members,
+          currentForm: {
+            member_id: current.member_id,
+            studio_id: current.studio_id,
+            amount: current.amount,
+            customer_name: current.customer_name
+          },
+          amountTouched
+        });
+        next.member_id = derived.member_id;
+        next.studio_id = derived.studio_id;
+        next.amount = derived.amount;
+        next.customer_name = derived.customer_name;
       }
       return next;
     });
+    if (name === "amount") setAmountTouched(true);
     setErrors((current) => ({ ...current, [name]: undefined }));
   }
   const visibleRecords = filterPerformancesByStudio(records, filter);
+  const packageOptions = filterPerformancePackagesForMember(packages, form.member_id);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -117,6 +141,7 @@ export function QuickPerformanceForm({ initialStudioId }: { initialStudioId?: st
         setRecords((current) => [newRecord, ...current]);
       }
       setForm({ ...initialForm, date: todayString(), teacher_id: result.data.teacher_id, studio_id: result.data.studio_id ?? "" });
+      setAmountTouched(false);
       setEditingId(null);
       setTone("success");
       setFeedback(editingId ? "这笔业绩已更新～" : "业绩已记好～");
@@ -140,12 +165,14 @@ export function QuickPerformanceForm({ initialStudioId }: { initialStudioId?: st
       commissionable: record.commissionable,
       note: record.note ?? ""
     });
+    setAmountTouched(true);
     setFeedback("");
   }
 
   function cancelEdit() {
     setEditingId(null);
     setForm({ ...initialForm, date: todayString(), teacher_id: form.teacher_id, studio_id: form.studio_id });
+    setAmountTouched(false);
   }
 
   async function removeRecord(record: Performance) {
@@ -183,7 +210,12 @@ export function QuickPerformanceForm({ initialStudioId }: { initialStudioId?: st
             <Field label="业绩类型" error={errors.type}><Select value={form.type} onChange={(e) => updateField("type", e.target.value)}>{Object.entries(performanceTypeLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select></Field>
             <Field label="计入提成"><div className="grid grid-cols-2 rounded-2xl bg-muted p-1"><button type="button" className={cn("min-h-11 rounded-xl text-sm font-medium", form.commissionable && "bg-card text-primary shadow-sm")} onClick={() => updateField("commissionable", true)}>计入提成</button><button type="button" className={cn("min-h-11 rounded-xl text-sm font-medium", !form.commissionable && "bg-card text-primary shadow-sm")} onClick={() => updateField("commissionable", false)}>不计提成</button></div></Field>
             <Field label="客户姓名（可选）" error={errors.customer_name}><Input value={form.customer_name} onChange={(e) => updateField("customer_name", e.target.value)} /></Field>
-            <details className="rounded-3xl bg-muted/70 p-3"><summary className="cursor-pointer text-sm font-medium">关联会员 / 课包（可选）</summary><div className="mt-3 space-y-3"><Field label="会员" error={errors.member_id}><Select value={form.member_id} onChange={(e) => updateField("member_id", e.target.value)}><option value="">不选择</option>{members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</Select></Field><Field label="课包" error={errors.package_id}><Select value={form.package_id} onChange={(e) => updateField("package_id", e.target.value)}><option value="">不选择</option>{packages.map((p) => <option key={p.id} value={p.id}>{p.package_name}</option>)}</Select></Field></div></details>
+            <div className={form.type === "private_package" ? "space-y-3 rounded-3xl bg-secondary/70 p-3" : "space-y-3 rounded-3xl bg-muted/70 p-3"}>
+              <p className="text-sm font-medium">关联会员 / 课包（可选）</p>
+              {form.type === "private_package" ? <p className="text-sm text-muted-foreground">如果这笔业绩来自课包成交，可以关联对应课包，后续回看会更清楚。</p> : null}
+              <Field label="会员" error={errors.member_id}><Select value={form.member_id} onChange={(e) => updateField("member_id", e.target.value)}><option value="">不选择</option>{members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</Select></Field>
+              <Field label="课包" error={errors.package_id}><Select value={form.package_id} onChange={(e) => updateField("package_id", e.target.value)}><option value="">不选择</option>{packageOptions.map((p) => <option key={p.id} value={p.id}>{p.package_name} · ¥{p.total_amount.toFixed(2)}</option>)}</Select></Field>
+            </div>
             <Field label="备注（可选）" error={errors.note}><Textarea value={form.note} onChange={(e) => updateField("note", e.target.value)} /></Field>
             {editingId ? <Button type="button" variant="secondary" className="w-full" onClick={cancelEdit}>取消编辑</Button> : null}
             <Button type="submit" className="w-full">{editingId ? "保存这笔业绩" : "记下这笔业绩"}</Button>

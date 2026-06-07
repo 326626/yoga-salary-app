@@ -13,13 +13,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { calculatePackageUsageFromClasses, createMemberPackage, getMemberDetail, listClassesByMember, listPackages, listPerformancesByMember, listStudios, type PackageUsage } from "@/lib/data";
+import { calculatePackageUsageFromClasses, createMemberPackage, getMemberDetail, listClassesByMember, listPackageItems, listPackages, listPerformancesByMember, listStudios, type PackageUsage } from "@/lib/data";
 import { mockClasses, mockMembers, mockPackages, mockPerformances, mockStudios } from "@/lib/mock-data";
 import { getPackageUsageLabel, getPackageUsageTone } from "@/lib/packages/usageDisplay";
 import { formatMoney } from "@/lib/salary/formatMoney";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { createMemberPackageInputSchema } from "@/lib/validation";
-import type { ClassRecord, Member, MemberPackage, Performance, Studio } from "@/types";
+import type { ClassRecord, Member, MemberPackage, PackageItem, Performance, Studio } from "@/types";
 
 const courseTypeLabels: Record<string, string> = { group: "团课", private: "私教", trial: "体验课", substitute: "代课", other: "其他" };
 const performanceTypeLabels: Record<string, string> = { new_card: "新办卡", renewal: "续费", private_package: "私教包", product: "商品", other: "其他" };
@@ -44,6 +44,7 @@ export function MemberDetailView({ memberId }: { memberId: string }) {
   const [user, setUser] = useState<User | null>(null);
   const [member, setMember] = useState<Member | null>(mockMembers.find((item) => item.id === memberId) ?? null);
   const [packages, setPackages] = useState<MemberPackage[]>(mockPackages.filter((item) => item.member_id === memberId));
+  const [packageItems, setPackageItems] = useState<PackageItem[]>([]);
   const [studios, setStudios] = useState<Studio[]>(mockStudios);
   const [classes, setClasses] = useState<ClassRecord[]>(mockClasses.filter((item) => item.member_id === memberId));
   const [performances, setPerformances] = useState<Performance[]>(mockPerformances.filter((item) => item.member_id === memberId));
@@ -74,15 +75,17 @@ export function MemberDetailView({ memberId }: { memberId: string }) {
         setMessage("当前是体验数据，登录后可以查看你自己的会员详情。");
         return;
       }
-      const [realMember, allPackages, realClasses, realPerformances, realStudios] = await Promise.all([
+      const [realMember, allPackages, allPackageItems, realClasses, realPerformances, realStudios] = await Promise.all([
         getMemberDetail(supabase, currentUser.id, memberId),
         listPackages(supabase, currentUser.id),
+        listPackageItems(supabase, currentUser.id),
         listClassesByMember(supabase, currentUser.id, memberId),
         listPerformancesByMember(supabase, currentUser.id, memberId),
         listStudios(supabase, currentUser.id)
       ]);
       setMember(realMember);
       setPackages(allPackages.filter((item) => item.member_id === memberId));
+      setPackageItems(allPackageItems.filter((item) => item.member_id === memberId));
       setClasses(realClasses);
       setPerformances(realPerformances);
       setStudios(realStudios);
@@ -185,7 +188,7 @@ export function MemberDetailView({ memberId }: { memberId: string }) {
             {!isPackageFormOpen ? <Button size="sm" onClick={() => setIsPackageFormOpen(true)}>新增课包</Button> : null}
           </div>
           {isPackageFormOpen ? <MemberPackageMiniForm form={packageForm} onChange={updatePackageField} onCancel={() => resetPackageForm()} onSubmit={handleCreatePackage} /> : null}
-          {packages.length === 0 ? <Empty text="还没有课包，可以先给她添加一个～" /> : packages.map((item) => <PackageRow key={item.id} item={item} usage={calculatePackageUsageFromClasses(item, classes)} />)}
+          {packages.length === 0 ? <Empty text="还没有课包，可以先给她添加一个～" /> : packages.map((item) => <PackageRow key={item.id} item={item} items={packageItems.filter((packageItem) => packageItem.package_id === item.id)} usage={calculatePackageUsageFromClasses(item, classes, packageItems)} />)}
         </section>
       ) : null}
 
@@ -254,7 +257,7 @@ function MemberPackageMiniForm({ form, onChange, onCancel, onSubmit }: { form: M
   );
 }
 
-function PackageRow({ item, usage }: { item: MemberPackage; usage: PackageUsage }) {
+function PackageRow({ item, items, usage }: { item: MemberPackage; items: PackageItem[]; usage: PackageUsage }) {
   return (
     <article className="space-y-3 rounded-3xl border border-white/70 bg-card/90 p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -269,6 +272,16 @@ function PackageRow({ item, usage }: { item: MemberPackage; usage: PackageUsage 
         <Pill label="课时" value={`${item.total_sessions}`} />
         <Pill label="单节" value={`¥${formatMoney(item.unit_price)}`} />
       </div>
+      {items.length > 1 ? (
+        <div className="space-y-2 rounded-3xl bg-muted/70 p-3 text-sm text-muted-foreground">
+          {items.map((packageItem) => (
+            <div key={packageItem.id} className="flex justify-between gap-3">
+              <span>{packageItem.item_name} · {packageItem.sessions} 节</span>
+              <span>¥{formatMoney(packageItem.unit_price)}/节</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
       <UsageMini usage={usage} />
       <Button asChild variant="secondary" className="w-full">
         <Link href={`/classes?memberId=${item.member_id}&packageId=${item.id}&studioId=${item.studio_id ?? ""}&courseType=private`}>用这个课包记一节课</Link>

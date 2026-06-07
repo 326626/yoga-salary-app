@@ -1,4 +1,4 @@
-import type { ClassRecord, MemberPackage, Performance, StructuredSalaryRule } from "@/types";
+import type { ClassRecord, MemberPackage, PackageItem, Performance, StructuredSalaryRule } from "@/types";
 
 import { calculateClassFee, type ClassFeeBreakdownItem } from "./calculateClassFee";
 import { calculateCommission, type CommissionBreakdownItem } from "./calculateCommission";
@@ -10,6 +10,7 @@ export type CalculateMonthlySalaryInput = {
   classes: ClassRecord[];
   performances: Performance[];
   packages: MemberPackage[];
+  packageItems?: PackageItem[];
   salaryRule: StructuredSalaryRule;
 };
 
@@ -44,6 +45,7 @@ export function calculateMonthlySalary(input: CalculateMonthlySalaryInput): Mont
   const classFeeResult = calculateClassFee({
     classes: monthlyClasses,
     packages: input.packages,
+    packageItems: input.packageItems,
     salaryRule: input.salaryRule
   });
   const commissionResult = calculateCommission({

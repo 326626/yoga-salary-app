@@ -1,6 +1,7 @@
 export * from "./classes";
 export * from "./members";
 export * from "./packages";
+export * from "./packageItems";
 export * from "./packageUsage";
 export * from "./performances";
 export * from "./relationCounts";

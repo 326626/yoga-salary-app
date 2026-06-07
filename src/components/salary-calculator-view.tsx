@@ -11,9 +11,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { calculatePackageUsageFromClasses, createSalaryCalculation, findSalaryCalculationByMonthAndStudio, listClasses, listMembers, listPackages, listPerformances, listSalaryRules, listStudios, listTeachers, updateSalaryCalculation } from "@/lib/data";
+import { calculatePackageItemUsage, calculatePackageUsageFromClasses, createSalaryCalculation, findSalaryCalculationByMonthAndStudio, listClasses, listMembers, listPackageItems, listPackages, listPerformances, listSalaryRules, listStudios, listTeachers, updateSalaryCalculation } from "@/lib/data";
 import { activeMockSalaryRule, mockClasses, mockMembers, mockPackages, mockPerformances, mockStudios, mockTeachers } from "@/lib/mock-data";
-import { getPackageUsageLabel } from "@/lib/packages/usageDisplay";
+import { getPackageItemUsageLabel, getPackageUsageLabel } from "@/lib/packages/usageDisplay";
 import { calculateMonthlySalary, type MonthlySalaryResult } from "@/lib/salary";
 import { describeClassFeeContext, getPrivateClassPackageWarning } from "@/lib/salary/detailDisplay";
 import { filterSalaryData } from "@/lib/salary/filterSalaryData";
@@ -21,7 +21,7 @@ import { formatMoney } from "@/lib/salary/formatMoney";
 import { selectSalaryRule } from "@/lib/salary/selectSalaryRule";
 import { buildUnassignedNotice } from "@/lib/studios/studioOverview";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
-import type { ClassRecord, Member, MemberPackage, Performance, SalaryCalculation, SalaryRule, Studio, StructuredSalaryRule, Teacher } from "@/types";
+import type { ClassRecord, Member, MemberPackage, PackageItem, Performance, SalaryCalculation, SalaryRule, Studio, StructuredSalaryRule, Teacher } from "@/types";
 
 const courseTypeLabels: Record<string, string> = {
   group: "团课",
@@ -44,13 +44,14 @@ function emptyRule(): StructuredSalaryRule {
   };
 }
 
-function calculateFor(teacherId: string, month: string, classes = mockClasses, performances = mockPerformances, packages = mockPackages, salaryRule = activeMockSalaryRule) {
+function calculateFor(teacherId: string, month: string, classes = mockClasses, performances = mockPerformances, packages = mockPackages, salaryRule = activeMockSalaryRule, packageItems: PackageItem[] = []) {
   return calculateMonthlySalary({
     teacherId,
     month,
     classes,
     performances,
     packages,
+    packageItems,
     salaryRule: salaryRule?.structured_rule ?? emptyRule()
   });
 }
@@ -63,6 +64,7 @@ export function SalaryCalculatorView({ initialStudioId }: { initialStudioId?: st
   const [classes, setClasses] = useState<ClassRecord[]>(mockClasses);
   const [performances, setPerformances] = useState<Performance[]>(mockPerformances);
   const [packages, setPackages] = useState<MemberPackage[]>(mockPackages);
+  const [packageItems, setPackageItems] = useState<PackageItem[]>([]);
   const [salaryRules, setSalaryRules] = useState<SalaryRule[]>(activeMockSalaryRule ? [activeMockSalaryRule] : []);
   const [message, setMessage] = useState("当前是体验数据，登录后可以计算你自己的工资。");
   const [teacherId, setTeacherId] = useState(mockTeachers[0]?.id ?? "");
@@ -79,13 +81,14 @@ export function SalaryCalculatorView({ initialStudioId }: { initialStudioId?: st
       const currentUser = data.session?.user ?? null;
       setUser(currentUser);
       if (!currentUser) return;
-      const [realTeachers, realStudios, realMembers, realClasses, realPerformances, realPackages, realSalaryRules, existingSnapshot] = await Promise.all([
+      const [realTeachers, realStudios, realMembers, realClasses, realPerformances, realPackages, realPackageItems, realSalaryRules, existingSnapshot] = await Promise.all([
         listTeachers(supabase, currentUser.id),
         listStudios(supabase, currentUser.id),
         listMembers(supabase, currentUser.id),
         listClasses(supabase, currentUser.id),
         listPerformances(supabase, currentUser.id),
         listPackages(supabase, currentUser.id),
+        listPackageItems(supabase, currentUser.id),
         listSalaryRules(supabase, currentUser.id),
         findSalaryCalculationByMonthAndStudio(supabase, currentUser.id, month, studioId || null)
       ]);
@@ -97,6 +100,7 @@ export function SalaryCalculatorView({ initialStudioId }: { initialStudioId?: st
       setClasses(realClasses);
       setPerformances(realPerformances);
       setPackages(realPackages);
+      setPackageItems(realPackageItems);
       setSalaryRules(realSalaryRules);
       setSavedSnapshot(existingSnapshot);
       const nextTeacherId = realTeachers[0]?.id ?? "";
@@ -109,7 +113,7 @@ export function SalaryCalculatorView({ initialStudioId }: { initialStudioId?: st
       } else {
         setMessage(selectedRule.message ?? "");
         const filtered = filterSalaryData({ classes: realClasses, performances: realPerformances, packages: realPackages, studioId: effectiveStudioId });
-        setResult(calculateFor(nextTeacherId, month, filtered.classes, filtered.performances, filtered.packages, selectedRule.rule));
+        setResult(calculateFor(nextTeacherId, month, filtered.classes, filtered.performances, filtered.packages, selectedRule.rule, realPackageItems));
       }
     }).catch(() => {
       setMessage("网络好像开小差了，请再试一次～");
@@ -139,7 +143,7 @@ export function SalaryCalculatorView({ initialStudioId }: { initialStudioId?: st
     }
     const filtered = filterSalaryData({ classes, performances, packages, studioId });
     setMessage(selectedRule.message ?? "");
-    setResult(calculateFor(teacherId, month, filtered.classes, filtered.performances, filtered.packages, selectedRule.rule ?? activeMockSalaryRule));
+    setResult(calculateFor(teacherId, month, filtered.classes, filtered.performances, filtered.packages, selectedRule.rule ?? activeMockSalaryRule, packageItems));
   }
 
   async function handleSaveSnapshot() {
@@ -299,8 +303,10 @@ export function SalaryCalculatorView({ initialStudioId }: { initialStudioId?: st
           result.breakdown.classFees.map((item) => {
             const classRecord = classes.find((record) => record.id === item.classId);
             const memberPackage = packages.find((record) => record.id === classRecord?.package_id);
-            const packageUsage = memberPackage ? calculatePackageUsageFromClasses(memberPackage, classes) : null;
-            const context = describeClassFeeContext({ classRecord, members, packages, formula: item.formula });
+            const packageItem = packageItems.find((record) => record.id === classRecord?.package_item_id);
+            const packageUsage = memberPackage ? calculatePackageUsageFromClasses(memberPackage, classes, packageItems) : null;
+            const packageItemUsage = packageItem ? calculatePackageItemUsage(packageItem, classes) : null;
+            const context = describeClassFeeContext({ classRecord, members, packages, packageItems, formula: item.formula });
             const warning = getPrivateClassPackageWarning(Boolean(classRecord?.package_id));
 
             return (
@@ -313,7 +319,11 @@ export function SalaryCalculatorView({ initialStudioId }: { initialStudioId?: st
                 <Badge>{courseTypeLabels[item.courseType] ?? item.courseType}</Badge>
               </div>
               <div className="rounded-2xl bg-muted/70 px-3 py-2 text-sm text-muted-foreground">{context}</div>
-              {packageUsage ? (
+              {packageItemUsage ? (
+                <div className={packageItemUsage.isOverused ? "rounded-2xl bg-amber-50 px-3 py-2 text-sm text-amber-800" : "rounded-2xl bg-secondary/70 px-3 py-2 text-sm text-muted-foreground"}>
+                  项目当前：已上 {packageItemUsage.usedSessions} 节，{getPackageItemUsageLabel(packageItemUsage)}
+                </div>
+              ) : packageUsage ? (
                 <div className={packageUsage.isOverused ? "rounded-2xl bg-amber-50 px-3 py-2 text-sm text-amber-800" : "rounded-2xl bg-secondary/70 px-3 py-2 text-sm text-muted-foreground"}>
                   课包当前：已上 {packageUsage.usedSessions} 节，{getPackageUsageLabel(packageUsage)}
                 </div>
