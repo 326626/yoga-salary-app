@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { createSalaryRule, deactivateSalaryRules, getActiveSalaryRule, listSalaryRules, listStudios } from "@/lib/data";
 import { describeSalaryRule } from "@/lib/salary/ruleDisplay";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { createClientId } from "@/lib/utils/id";
 import { structuredSalaryRuleSchema } from "@/lib/validation";
 import type { SalaryRule, Studio, StructuredSalaryRule } from "@/types";
 
@@ -95,7 +96,7 @@ export function SalaryRulesView({ initialStudioId }: { initialStudioId?: string 
     setFeedback("正在帮你整理规则～");
     const currentText = inputText;
     const currentFiles = files;
-    setMessages((current) => [...current, { id: crypto.randomUUID(), role: "user", text: currentText || "上传了附件", fileCount: currentFiles.length }]);
+    setMessages((current) => [...current, { id: createClientId("msg"), role: "user", text: currentText || "上传了附件", fileCount: currentFiles.length }]);
 
     try {
       const formData = new FormData();
@@ -106,7 +107,7 @@ export function SalaryRulesView({ initialStudioId }: { initialStudioId?: string 
       const payload = await response.json();
       if (!payload.ok) {
         setFeedback(payload.message ?? "规则有点复杂，可以手动调整一下～");
-        setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", text: payload.message ?? "规则有点复杂，可以手动调整一下～" }]);
+        setMessages((current) => [...current, { id: createClientId("msg"), role: "assistant", text: payload.message ?? "规则有点复杂，可以手动调整一下～" }]);
         return;
       }
       const validation = structuredSalaryRuleSchema.safeParse(payload.structured_rule);
@@ -117,12 +118,13 @@ export function SalaryRulesView({ initialStudioId }: { initialStudioId?: string 
       setPreviewRule(validation.data);
       setJsonText(JSON.stringify(validation.data, null, 2));
       setJsonMessage(validation.data.uncertain_items.length ? "有一些内容还不确定，可以继续补充说明。" : "规则校验通过，请确认后再启用。");
-      setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", text: payload.assistant_message ?? "我整理出了一版规则草稿～" }]);
+      setMessages((current) => [...current, { id: createClientId("msg"), role: "assistant", text: payload.assistant_message ?? "我整理出了一版规则草稿～" }]);
       setInputText("");
       setFiles([]);
       setFeedback(payload.message ?? "");
     } catch {
       setFeedback("规则有点复杂，可以手动调整一下～");
+      setMessages((current) => [...current, { id: createClientId("msg"), role: "assistant", text: "规则有点复杂，可以手动调整一下～" }]);
     } finally {
       setIsParsing(false);
     }
