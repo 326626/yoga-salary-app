@@ -33,21 +33,21 @@
   }
 
   :root[data-density="compact"] {
-    --app-font-scale: 0.92;
-    --app-control-height: 2.55rem;
-    --app-control-height-sm: 2.35rem;
-    --app-control-height-icon: 2.55rem;
-    --app-card-padding: 0.85rem;
-    --app-tab-height: 2.85rem;
+    --app-font-scale: 0.88;
+    --app-control-height: 2.35rem;
+    --app-control-height-sm: 2.2rem;
+    --app-control-height-icon: 2.35rem;
+    --app-card-padding: 0.75rem;
+    --app-tab-height: 2.65rem;
   }
 
   :root[data-density="comfortable"] {
-    --app-font-scale: 1;
-    --app-control-height: 3rem;
-    --app-control-height-sm: 2.75rem;
-    --app-control-height-icon: 3rem;
-    --app-card-padding: 1.15rem;
-    --app-tab-height: 3.35rem;
+    --app-font-scale: 1.04;
+    --app-control-height: 3.15rem;
+    --app-control-height-sm: 2.9rem;
+    --app-control-height-icon: 3.15rem;
+    --app-card-padding: 1.25rem;
+    --app-tab-height: 3.55rem;
   }
 
   * {

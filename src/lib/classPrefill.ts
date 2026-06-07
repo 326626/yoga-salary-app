@@ -6,6 +6,7 @@ export type ClassPrefillQuery = {
   teacherId?: string;
   studioId?: string;
   courseType?: string;
+  month?: string;
   user_id?: string;
 };
 

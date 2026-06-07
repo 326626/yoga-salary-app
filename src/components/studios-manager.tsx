@@ -13,7 +13,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { countStudioRelations, createStudio, deleteStudio, listStudios, updateStudio } from "@/lib/data";
-import { mockStudios } from "@/lib/mock-data";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { createStudioInputSchema } from "@/lib/validation";
 import type { Studio } from "@/types";
@@ -25,25 +24,34 @@ const emptyForm: StudioForm = { name: "", contact_name: "", phone: "", address: 
 
 export function StudiosManager() {
   const [user, setUser] = useState<User | null>(null);
-  const [studios, setStudios] = useState<Studio[]>(mockStudios);
+  const [studios, setStudios] = useState<Studio[]>([]);
   const [form, setForm] = useState<StudioForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [feedback, setFeedback] = useState("");
   const [tone, setTone] = useState<"success" | "warning" | "error">("success");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured()) {
+      setLoading(false);
+      return;
+    }
     const supabase = createBrowserSupabaseClient();
     supabase.auth.getSession().then(async ({ data }) => {
       const currentUser = data.session?.user ?? null;
       setUser(currentUser);
-      if (!currentUser) return;
+      if (!currentUser) {
+        setLoading(false);
+        return;
+      }
       setStudios(await listStudios(supabase, currentUser.id));
+      setLoading(false);
     }).catch(() => {
       setTone("error");
       setFeedback("网络好像开小差了，请再试一次～");
+      setLoading(false);
     });
   }, []);
 
@@ -137,6 +145,7 @@ export function StudiosManager() {
 
   return (
     <div className="space-y-5">
+      {loading ? <div className="rounded-3xl bg-card/80 p-5 text-sm text-muted-foreground">正在加载你的记录～</div> : null}
       <header className="space-y-2">
         <p className="text-sm text-muted-foreground">工作地点</p>
         <h1 className="text-2xl font-semibold tracking-normal">瑜伽馆 / 工作地点</h1>

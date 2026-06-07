@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 const docs = [
   "docs/mobile-qa-checklist.md",
   "docs/smoke-test.md",
-  "docs/deployment-troubleshooting.md"
+  "docs/deployment-troubleshooting.md",
+  "docs/aliyun-deploy.md"
 ];
 
 describe("deployment documentation", () => {

@@ -16,9 +16,9 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { createPerformance, deletePerformance, listMembers, listPackages, listPerformances, listStudios, listTeachers, updatePerformance } from "@/lib/data";
-import { mockMembers, mockPackages, mockPerformances, mockStudios, mockTeachers } from "@/lib/mock-data";
 import { derivePerformancePackageSelection, filterPerformancePackagesForMember } from "@/lib/performances/packageLinkage";
-import { filterPerformancesByStudio, type StudioRecordFilter } from "@/lib/records/recordFilters";
+import { filterPerformances, summarizePerformances, type CommissionableFilter, type StudioRecordFilter } from "@/lib/records/recordFilters";
+import { formatMoney } from "@/lib/salary/formatMoney";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { createPerformanceInputSchema } from "@/lib/validation";
 import type { Member, MemberPackage, Performance, PerformanceType, Studio, Teacher } from "@/types";
@@ -26,30 +26,41 @@ import type { Member, MemberPackage, Performance, PerformanceType, Studio, Teach
 const performanceTypeLabels: Record<PerformanceType, string> = { new_card: "新办卡", renewal: "续费", private_package: "私教包", product: "商品", other: "其他" };
 type FieldErrors = Partial<Record<keyof z.infer<typeof createPerformanceInputSchema>, string>>;
 const todayString = () => new Date().toISOString().slice(0, 10);
-const initialForm = { date: todayString(), teacher_id: mockTeachers[0]?.id ?? "", studio_id: mockStudios[0]?.id ?? "", type: "new_card", amount: "", customer_name: "", member_id: "", package_id: "", commissionable: true, note: "" };
+const currentMonth = () => new Date().toISOString().slice(0, 7);
+const initialForm = { date: todayString(), teacher_id: "", studio_id: "", type: "new_card", amount: "", customer_name: "", member_id: "", package_id: "", commissionable: true, note: "" };
 
-export function QuickPerformanceForm({ initialStudioId, initialMemberId, initialPackageId }: { initialStudioId?: string; initialMemberId?: string; initialPackageId?: string }) {
+export function QuickPerformanceForm({ initialStudioId, initialMemberId, initialPackageId, initialMonth, initialCommissionable }: { initialStudioId?: string; initialMemberId?: string; initialPackageId?: string; initialMonth?: string; initialCommissionable?: CommissionableFilter }) {
   const [user, setUser] = useState<User | null>(null);
-  const [teachers, setTeachers] = useState<Teacher[]>(mockTeachers);
-  const [studios, setStudios] = useState<Studio[]>(mockStudios);
-  const [members, setMembers] = useState<Member[]>(mockMembers);
-  const [packages, setPackages] = useState<MemberPackage[]>(mockPackages);
-  const [records, setRecords] = useState<Performance[]>(mockPerformances);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [studios, setStudios] = useState<Studio[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [packages, setPackages] = useState<MemberPackage[]>([]);
+  const [records, setRecords] = useState<Performance[]>([]);
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [feedback, setFeedback] = useState("");
   const [tone, setTone] = useState<"success" | "warning" | "error">("success");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<StudioRecordFilter>("all");
+  const [monthFilter, setMonthFilter] = useState(initialMonth && /^\d{4}-\d{2}$/.test(initialMonth) ? initialMonth : currentMonth());
+  const [memberFilter, setMemberFilter] = useState(initialMemberId ?? "");
+  const [commissionableFilter, setCommissionableFilter] = useState<CommissionableFilter>(initialCommissionable === "true" || initialCommissionable === "false" ? initialCommissionable : "all");
   const [amountTouched, setAmountTouched] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured()) {
+      setLoading(false);
+      return;
+    }
     const supabase = createBrowserSupabaseClient();
     supabase.auth.getSession().then(async ({ data }) => {
       const currentUser = data.session?.user ?? null;
       setUser(currentUser);
-      if (!currentUser) return;
+      if (!currentUser) {
+        setLoading(false);
+        return;
+      }
       const [realTeachers, realStudios, realMembers, realPackages, realPerformances] = await Promise.all([
         listTeachers(supabase, currentUser.id),
         listStudios(supabase, currentUser.id),
@@ -72,9 +83,12 @@ export function QuickPerformanceForm({ initialStudioId, initialMemberId, initial
           : base;
       });
       setFilter(realStudios.some((studio) => studio.id === initialStudioId) ? initialStudioId ?? "all" : "all");
+      setMemberFilter(realMembers.some((member) => member.id === initialMemberId) ? initialMemberId ?? "" : "");
+      setLoading(false);
     }).catch(() => {
       setTone("error");
       setFeedback("网络好像开小差了，请再试一次～");
+      setLoading(false);
     });
   }, [initialMemberId, initialPackageId, initialStudioId]);
 
@@ -114,7 +128,8 @@ export function QuickPerformanceForm({ initialStudioId, initialMemberId, initial
     if (name === "amount") setAmountTouched(true);
     setErrors((current) => ({ ...current, [name]: undefined }));
   }
-  const visibleRecords = filterPerformancesByStudio(records, filter);
+  const visibleRecords = filterPerformances(records, { month: monthFilter, studioId: filter, memberId: memberFilter, commissionable: commissionableFilter });
+  const summary = summarizePerformances(visibleRecords);
   const packageOptions = filterPerformancePackagesForMember(packages, form.member_id);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -197,6 +212,7 @@ export function QuickPerformanceForm({ initialStudioId, initialMemberId, initial
 
   return (
     <div className="space-y-5">
+      {loading ? <div className="rounded-3xl bg-card/80 p-5 text-sm text-muted-foreground">正在加载你的记录～</div> : null}
       <div className="space-y-2"><p className="text-sm text-muted-foreground">轻松记一笔收入</p><h1 className="text-2xl font-semibold tracking-normal">记一笔业绩</h1></div>
       <Card>
         <CardHeader className="p-4"><CardTitle className="flex items-center gap-2 text-lg"><WalletCards className="size-5 text-primary" />今天成交了什么？</CardTitle></CardHeader>
@@ -223,8 +239,17 @@ export function QuickPerformanceForm({ initialStudioId, initialMemberId, initial
         </CardContent>
       </Card>
       <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3"><h2 className="text-base font-semibold">最近业绩记录</h2><Select className="w-36 text-sm" value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">全部瑜伽馆</option><option value="unassigned">未归属</option>{studios.map((studio) => <option key={studio.id} value={studio.id}>{studio.name}</option>)}</Select></div>
-        {visibleRecords.length === 0 ? <EmptyState text="还没有业绩记录，记录第一笔收入吧～" /> : visibleRecords.slice(0, 12).map((record) => <PerformanceCard key={record.id} record={record} studios={studios} members={members} packages={packages} onEdit={startEdit} onDelete={removeRecord} />)}
+        <h2 className="text-base font-semibold">业绩记录</h2>
+        <div className="rounded-3xl bg-secondary/70 p-4 text-sm text-muted-foreground">
+          本月计提业绩 <span className="font-semibold text-primary">¥{formatMoney(summary.commissionableTotal)}</span>，共 {summary.count} 笔
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Input type="month" value={monthFilter} onChange={(event) => setMonthFilter(event.target.value || currentMonth())} />
+          <Select value={commissionableFilter} onChange={(event) => setCommissionableFilter(event.target.value as CommissionableFilter)}><option value="all">全部</option><option value="true">计入提成</option><option value="false">不计提成</option></Select>
+          <Select value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">全部瑜伽馆</option><option value="unassigned">未归属</option>{studios.map((studio) => <option key={studio.id} value={studio.id}>{studio.name}</option>)}</Select>
+          <Select value={memberFilter} onChange={(event) => setMemberFilter(event.target.value)}><option value="">全部会员</option>{members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</Select>
+        </div>
+        {visibleRecords.length === 0 ? <EmptyState text="这个条件下还没有业绩记录～" /> : visibleRecords.slice(0, 24).map((record) => <PerformanceCard key={record.id} record={record} studios={studios} members={members} packages={packages} onEdit={startEdit} onDelete={removeRecord} />)}
       </section>
     </div>
   );

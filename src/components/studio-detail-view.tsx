@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getStudioDetail, listClasses, listMembers, listPackages, listPerformances, listSalaryRules } from "@/lib/data";
-import { mockClasses, mockMembers, mockPackages, mockPerformances, mockSalaryRules, mockStudios } from "@/lib/mock-data";
 import { formatMoney } from "@/lib/salary/formatMoney";
 import { calculateStudioMonthOverview } from "@/lib/studios/studioOverview";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
@@ -21,22 +20,26 @@ const performanceTypeLabels: Record<string, string> = { new_card: "新办卡", r
 
 export function StudioDetailView({ studioId }: { studioId: string }) {
   const [user, setUser] = useState<User | null>(null);
-  const [studio, setStudio] = useState<Studio | null>(mockStudios.find((item) => item.id === studioId) ?? null);
-  const [members, setMembers] = useState<Member[]>(mockMembers);
-  const [classes, setClasses] = useState<ClassRecord[]>(mockClasses);
-  const [performances, setPerformances] = useState<Performance[]>(mockPerformances);
-  const [packages, setPackages] = useState<MemberPackage[]>(mockPackages);
-  const [salaryRules, setSalaryRules] = useState<SalaryRule[]>(mockSalaryRules);
+  const [studio, setStudio] = useState<Studio | null>(null);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [classes, setClasses] = useState<ClassRecord[]>([]);
+  const [performances, setPerformances] = useState<Performance[]>([]);
+  const [packages, setPackages] = useState<MemberPackage[]>([]);
+  const [salaryRules, setSalaryRules] = useState<SalaryRule[]>([]);
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured()) {
+      setLoading(false);
+      return;
+    }
     const supabase = createBrowserSupabaseClient();
     supabase.auth.getSession().then(async ({ data }) => {
       const currentUser = data.session?.user ?? null;
       setUser(currentUser);
       if (!currentUser) {
-        setMessage("当前是体验数据，登录后可以查看你自己的瑜伽馆详情。");
+        setLoading(false);
         return;
       }
       const [realStudio, realMembers, realClasses, realPerformances, realPackages, realRules] = await Promise.all([
@@ -53,7 +56,11 @@ export function StudioDetailView({ studioId }: { studioId: string }) {
       setPerformances(realPerformances);
       setPackages(realPackages);
       setSalaryRules(realRules);
-    }).catch(() => setMessage("网络好像开小差了，请再试一次～"));
+      setLoading(false);
+    }).catch(() => {
+      setMessage("网络好像开小差了，请再试一次～");
+      setLoading(false);
+    });
   }, [studioId]);
 
   const related = useMemo(() => ({
@@ -66,7 +73,7 @@ export function StudioDetailView({ studioId }: { studioId: string }) {
   const overview = useMemo(() => calculateStudioMonthOverview({ classes, performances, packages, salaryRules, studioId, month }), [classes, packages, performances, salaryRules, studioId]);
 
   if (!studio) {
-    return <div className="space-y-4"><BackButton /><Card><CardContent className="p-5 text-sm text-muted-foreground">没有找到这个瑜伽馆，可能已经删除或不属于当前账号。</CardContent></Card></div>;
+    return <div className="space-y-4"><BackButton /><Card><CardContent className="p-5 text-sm text-muted-foreground">{loading ? "正在加载你的记录～" : "没有找到这个瑜伽馆，可能已经删除或不属于当前账号。"}</CardContent></Card></div>;
   }
 
   return (

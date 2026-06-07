@@ -14,7 +14,6 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { countMemberRelations, createMember, deleteMember, listMembers, listPackages, listStudios, updateMember } from "@/lib/data";
-import { mockMembers, mockPackages, mockStudios } from "@/lib/mock-data";
 import { getMemberDeletePrompt } from "@/lib/relationPrompts";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { createMemberInputSchema } from "@/lib/validation";
@@ -24,7 +23,7 @@ type MemberForm = z.infer<typeof createMemberInputSchema>;
 type FieldErrors = Partial<Record<keyof MemberForm, string>>;
 
 const emptyForm: MemberForm = {
-  studio_id: mockStudios[0]?.id ?? "",
+  studio_id: "",
   name: "",
   phone: "",
   note: ""
@@ -32,9 +31,9 @@ const emptyForm: MemberForm = {
 
 export function MembersManager() {
   const [user, setUser] = useState<User | null>(null);
-  const [members, setMembers] = useState<Member[]>(mockMembers);
-  const [packages, setPackages] = useState<MemberPackage[]>(mockPackages);
-  const [studios, setStudios] = useState<Studio[]>(mockStudios);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [packages, setPackages] = useState<MemberPackage[]>([]);
+  const [studios, setStudios] = useState<Studio[]>([]);
   const [form, setForm] = useState<MemberForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -43,22 +42,31 @@ export function MembersManager() {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [feedback, setFeedback] = useState("");
   const [tone, setTone] = useState<"success" | "warning" | "error">("success");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured()) {
+      setLoading(false);
+      return;
+    }
     const supabase = createBrowserSupabaseClient();
     supabase.auth.getSession().then(async ({ data }) => {
       const currentUser = data.session?.user ?? null;
       setUser(currentUser);
-      if (!currentUser) return;
+      if (!currentUser) {
+        setLoading(false);
+        return;
+      }
       const [realMembers, realPackages, realStudios] = await Promise.all([listMembers(supabase, currentUser.id), listPackages(supabase, currentUser.id), listStudios(supabase, currentUser.id)]);
       setMembers(realMembers);
       setPackages(realPackages);
       setStudios(realStudios);
       setForm((current) => ({ ...current, studio_id: realStudios[0]?.id ?? "" }));
+      setLoading(false);
     }).catch(() => {
       setTone("error");
       setFeedback("网络好像开小差了，请再试一次～");
+      setLoading(false);
     });
   }, []);
 
@@ -150,6 +158,7 @@ export function MembersManager() {
 
   return (
     <div className="space-y-5">
+      {loading ? <div className="rounded-3xl bg-card/80 p-5 text-sm text-muted-foreground">正在加载你的记录～</div> : null}
       <header className="space-y-2">
         <p className="text-sm text-muted-foreground">会员档案</p>
         <h1 className="text-2xl font-semibold tracking-normal">管理会员</h1>

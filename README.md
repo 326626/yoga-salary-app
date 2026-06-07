@@ -65,7 +65,7 @@ npm test
 
 部署检查：
 
-- [next.config.mjs](/Users/b/Documents/yoga_app/next.config.mjs) 只开启 `reactStrictMode`，没有本地开发专属配置。
+- [next.config.mjs](/Users/b/Documents/yoga_app/next.config.mjs) 开启 `reactStrictMode` 和 `output: "standalone"`，可用于 Vercel 和 Node.js 自托管。
 - `package.json` 包含 `build`、`start`、`test` scripts。
 - 服务端不依赖本地文件系统持久化写入。
 - 图片识别当前不保存文件，不需要 Supabase Storage。
@@ -317,6 +317,7 @@ end $$;
 - [真实手机端验收清单](/Users/b/Documents/yoga_app/docs/mobile-qa-checklist.md)
 - [最小冒烟测试](/Users/b/Documents/yoga_app/docs/smoke-test.md)
 - [部署后排错](/Users/b/Documents/yoga_app/docs/deployment-troubleshooting.md)
+- [阿里云轻量服务器自托管部署](/Users/b/Documents/yoga_app/docs/aliyun-deploy.md)
 
 ## 工资快照逻辑
 

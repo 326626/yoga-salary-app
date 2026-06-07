@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 import { Leaf } from "lucide-react";
 
+import { AuthGate } from "@/components/auth-gate";
 import { BottomTabNav } from "@/components/bottom-tab-nav";
 import { DensityProvider } from "@/components/density-provider";
 import "./globals.css";
@@ -40,10 +42,13 @@ export default function RootLayout({
                   </span>
                   <span>瑜伽工资助手</span>
                 </Link>
-                <span className="rounded-full bg-secondary px-3 py-1 text-xs text-secondary-foreground">轻量原型</span>
               </div>
             </header>
-            <main className="app-main px-4 pt-5">{children}</main>
+            <main className="app-main px-4 pt-5">
+              <Suspense fallback={<div className="rounded-3xl bg-card/80 p-5 text-sm text-muted-foreground">正在加载你的记录～</div>}>
+                <AuthGate>{children}</AuthGate>
+              </Suspense>
+            </main>
           </div>
           <BottomTabNav />
         </div>

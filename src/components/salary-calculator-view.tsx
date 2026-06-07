@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { calculatePackageItemUsage, calculatePackageUsageFromClasses, createSalaryCalculation, findSalaryCalculationByMonthAndStudio, listClasses, listMembers, listPackageItems, listPackages, listPerformances, listSalaryRules, listStudios, listTeachers, updateSalaryCalculation } from "@/lib/data";
-import { activeMockSalaryRule, mockClasses, mockMembers, mockPackages, mockPerformances, mockStudios, mockTeachers } from "@/lib/mock-data";
 import { getPackageItemUsageLabel, getPackageUsageLabel } from "@/lib/packages/usageDisplay";
 import { calculateMonthlySalary, type MonthlySalaryResult } from "@/lib/salary";
 import { describeClassFeeContext, getPrivateClassPackageWarning } from "@/lib/salary/detailDisplay";
@@ -31,7 +30,7 @@ const courseTypeLabels: Record<string, string> = {
   other: "其他"
 };
 
-const defaultMonth = "2026-06";
+const defaultMonth = () => new Date().toISOString().slice(0, 7);
 
 function emptyRule(): StructuredSalaryRule {
   return {
@@ -44,7 +43,7 @@ function emptyRule(): StructuredSalaryRule {
   };
 }
 
-function calculateFor(teacherId: string, month: string, classes = mockClasses, performances = mockPerformances, packages = mockPackages, salaryRule = activeMockSalaryRule, packageItems: PackageItem[] = []) {
+function calculateFor(teacherId: string, month: string, classes: ClassRecord[], performances: Performance[], packages: MemberPackage[], salaryRule: SalaryRule, packageItems: PackageItem[] = []) {
   return calculateMonthlySalary({
     teacherId,
     month,
@@ -56,26 +55,41 @@ function calculateFor(teacherId: string, month: string, classes = mockClasses, p
   });
 }
 
-export function SalaryCalculatorView({ initialStudioId }: { initialStudioId?: string }) {
+function emptyResult(month: string): MonthlySalaryResult {
+  return calculateMonthlySalary({
+    teacherId: "",
+    month,
+    classes: [],
+    performances: [],
+    packages: [],
+    packageItems: [],
+    salaryRule: emptyRule()
+  });
+}
+
+export function SalaryCalculatorView({ initialStudioId, initialMonth }: { initialStudioId?: string; initialMonth?: string }) {
   const [user, setUser] = useState<User | null>(null);
-  const [teachers, setTeachers] = useState<Teacher[]>(mockTeachers);
-  const [studios, setStudios] = useState<Studio[]>(mockStudios);
-  const [members, setMembers] = useState<Member[]>(mockMembers);
-  const [classes, setClasses] = useState<ClassRecord[]>(mockClasses);
-  const [performances, setPerformances] = useState<Performance[]>(mockPerformances);
-  const [packages, setPackages] = useState<MemberPackage[]>(mockPackages);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [studios, setStudios] = useState<Studio[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [classes, setClasses] = useState<ClassRecord[]>([]);
+  const [performances, setPerformances] = useState<Performance[]>([]);
+  const [packages, setPackages] = useState<MemberPackage[]>([]);
   const [packageItems, setPackageItems] = useState<PackageItem[]>([]);
-  const [salaryRules, setSalaryRules] = useState<SalaryRule[]>(activeMockSalaryRule ? [activeMockSalaryRule] : []);
-  const [message, setMessage] = useState("当前是体验数据，登录后可以计算你自己的工资。");
-  const [teacherId, setTeacherId] = useState(mockTeachers[0]?.id ?? "");
+  const [salaryRules, setSalaryRules] = useState<SalaryRule[]>([]);
+  const [message, setMessage] = useState("正在加载你的记录～");
+  const [teacherId, setTeacherId] = useState("");
   const [studioId, setStudioId] = useState("");
-  const [month, setMonth] = useState(defaultMonth);
-  const [result, setResult] = useState<MonthlySalaryResult>(() => calculateFor(mockTeachers[0]?.id ?? "", defaultMonth));
+  const [month, setMonth] = useState(initialMonth && /^\d{4}-\d{2}$/.test(initialMonth) ? initialMonth : defaultMonth());
+  const [result, setResult] = useState<MonthlySalaryResult>(() => emptyResult(initialMonth && /^\d{4}-\d{2}$/.test(initialMonth) ? initialMonth : defaultMonth()));
   const [savedSnapshot, setSavedSnapshot] = useState<SalaryCalculation | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured()) {
+      setMessage("还没有连接云端服务，请先配置 Supabase～");
+      return;
+    }
     const supabase = createBrowserSupabaseClient();
     supabase.auth.getSession().then(async ({ data }) => {
       const currentUser = data.session?.user ?? null;
@@ -143,7 +157,7 @@ export function SalaryCalculatorView({ initialStudioId }: { initialStudioId?: st
     }
     const filtered = filterSalaryData({ classes, performances, packages, studioId });
     setMessage(selectedRule.message ?? "");
-    setResult(calculateFor(teacherId, month, filtered.classes, filtered.performances, filtered.packages, selectedRule.rule ?? activeMockSalaryRule, packageItems));
+    if (selectedRule.rule) setResult(calculateFor(teacherId, month, filtered.classes, filtered.performances, filtered.packages, selectedRule.rule, packageItems));
   }
 
   async function handleSaveSnapshot() {

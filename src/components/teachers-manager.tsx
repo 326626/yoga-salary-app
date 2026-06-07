@@ -13,7 +13,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { countTeacherRelations, createDefaultTeacher, createTeacher, deleteTeacher, listTeachers, updateTeacher } from "@/lib/data";
-import { mockTeachers } from "@/lib/mock-data";
 import { getTeacherDeletePrompt } from "@/lib/relationPrompts";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { createTeacherInputSchema } from "@/lib/validation";
@@ -30,7 +29,7 @@ const emptyForm: TeacherForm = {
 
 export function TeachersManager() {
   const [user, setUser] = useState<User | null>(null);
-  const [teachers, setTeachers] = useState<Teacher[]>(mockTeachers);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [form, setForm] = useState<TeacherForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [errors, setErrors] = useState<FieldErrors>({});

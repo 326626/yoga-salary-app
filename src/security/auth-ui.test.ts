@@ -15,4 +15,9 @@ describe("auth UI safety", () => {
     expect(content).toContain("fixed bottom-0 left-1/2");
     expect(content).toContain("env(safe-area-inset-bottom)");
   });
+
+  it("does not keep prototype wording in the app shell", () => {
+    const layout = readFileSync(join(process.cwd(), "src/app/layout.tsx"), "utf8");
+    expect(layout).not.toContain("轻量原型");
+  });
 });

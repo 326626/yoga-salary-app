@@ -16,9 +16,8 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { applyClassQueryPrefill, derivePackageSelection, filterPackagesForMember, type ClassPrefillQuery } from "@/lib/classPrefill";
 import { calculatePackageItemUsage, calculatePackageUsageFromClasses, createClassRecord, createDefaultTeacher, deleteClassRecord, listClasses, listMembers, listPackageItems, listPackages, listStudios, listTeachers, updateClassRecord, type PackageItemUsage, type PackageUsage } from "@/lib/data";
-import { mockClasses, mockMembers, mockPackages, mockStudios, mockTeachers } from "@/lib/mock-data";
 import { buildOveruseWarning, getPackageFinishedMessage, getPackageItemUsageLabel, getPackageUsageLabel, getPackageUsageTone } from "@/lib/packages/usageDisplay";
-import { filterClassesByStudio, type StudioRecordFilter } from "@/lib/records/recordFilters";
+import { filterClasses, type StudioRecordFilter } from "@/lib/records/recordFilters";
 import { buildClassSummary } from "@/lib/records/recordSummaries";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { createClassRecordInputSchema } from "@/lib/validation";
@@ -27,10 +26,11 @@ import type { ClassRecord, CourseType, Member, MemberPackage, PackageItem, Studi
 const courseTypeLabels: Record<CourseType, string> = { group: "团课", private: "私教", trial: "体验课", substitute: "代课", other: "其他" };
 type FieldErrors = Partial<Record<keyof z.infer<typeof createClassRecordInputSchema>, string>>;
 const todayString = () => new Date().toISOString().slice(0, 10);
+const currentMonth = () => new Date().toISOString().slice(0, 7);
 const initialForm = {
   date: todayString(),
-  teacher_id: mockTeachers[0]?.id ?? "",
-  studio_id: mockStudios[0]?.id ?? "",
+  teacher_id: "",
+  studio_id: "",
   course_type: "group",
   course_name: "",
   hours: "1",
@@ -44,12 +44,12 @@ const initialForm = {
 
 export function QuickClassForm({ initialQuery = {} }: { initialQuery?: ClassPrefillQuery }) {
   const [user, setUser] = useState<User | null>(null);
-  const [teachers, setTeachers] = useState<Teacher[]>(mockTeachers);
-  const [studios, setStudios] = useState<Studio[]>(mockStudios);
-  const [members, setMembers] = useState<Member[]>(mockMembers);
-  const [packages, setPackages] = useState<MemberPackage[]>(mockPackages);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [studios, setStudios] = useState<Studio[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [packages, setPackages] = useState<MemberPackage[]>([]);
   const [packageItems, setPackageItems] = useState<PackageItem[]>([]);
-  const [records, setRecords] = useState<ClassRecord[]>(mockClasses);
+  const [records, setRecords] = useState<ClassRecord[]>([]);
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [feedback, setFeedback] = useState("");
@@ -57,15 +57,24 @@ export function QuickClassForm({ initialQuery = {} }: { initialQuery?: ClassPref
   const [teacherTouched, setTeacherTouched] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<StudioRecordFilter>("all");
+  const [monthFilter, setMonthFilter] = useState(initialQuery.month && /^\d{4}-\d{2}$/.test(initialQuery.month) ? initialQuery.month : currentMonth());
+  const [memberFilter, setMemberFilter] = useState(initialQuery.memberId ?? "");
   const [expandedIds, setExpandedIds] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured()) {
+      setLoading(false);
+      return;
+    }
     const supabase = createBrowserSupabaseClient();
     supabase.auth.getSession().then(async ({ data }) => {
       const currentUser = data.session?.user ?? null;
       setUser(currentUser);
-      if (!currentUser) return;
+      if (!currentUser) {
+        setLoading(false);
+        return;
+      }
       try {
         const [realTeachers, realStudios, realMembers, realPackages, realPackageItems, realClasses] = await Promise.all([
           listTeachers(supabase, currentUser.id),
@@ -84,13 +93,17 @@ export function QuickClassForm({ initialQuery = {} }: { initialQuery?: ClassPref
         const preferredStudioId = realStudios.some((studio) => studio.id === initialQuery.studioId) ? initialQuery.studioId : realStudios[0]?.id;
         setForm((current) => applyClassQueryPrefill({ ...current, teacher_id: realTeachers[0]?.id ?? "", studio_id: preferredStudioId ?? "" }, initialQuery, realPackages));
         setFilter(realStudios.some((studio) => studio.id === initialQuery.studioId) ? initialQuery.studioId ?? "all" : "all");
+        setMemberFilter(realMembers.some((member) => member.id === initialQuery.memberId) ? initialQuery.memberId ?? "" : "");
+        setLoading(false);
       } catch {
         setTone("warning");
         setFeedback("数据表还没有同步到最新版本，请先在 Supabase 执行迁移 SQL。");
+        setLoading(false);
       }
     }).catch(() => {
       setTone("error");
       setFeedback("网络好像开小差了，请再试一次～");
+      setLoading(false);
     });
   }, [initialQuery]);
 
@@ -113,7 +126,7 @@ export function QuickClassForm({ initialQuery = {} }: { initialQuery?: ClassPref
     if (!selectedPackageUsage) return "";
     return buildOveruseWarning(Number(form.hours || 0), selectedPackageUsage.remainingSessions);
   }, [form.hours, selectedPackageUsage]);
-  const visibleRecords = useMemo(() => filterClassesByStudio(records, filter), [filter, records]);
+  const visibleRecords = useMemo(() => filterClasses(records, { month: monthFilter, studioId: filter, memberId: memberFilter }), [filter, memberFilter, monthFilter, records]);
 
   function updateField(name: keyof typeof form, value: string) {
     setForm((current) => {
@@ -253,6 +266,7 @@ export function QuickClassForm({ initialQuery = {} }: { initialQuery?: ClassPref
 
   return (
     <div className="space-y-5">
+      {loading ? <div className="rounded-3xl bg-card/80 p-5 text-sm text-muted-foreground">正在加载你的记录～</div> : null}
       <div className="space-y-2"><p className="text-sm text-muted-foreground">30 秒快速记课</p><h1 className="text-2xl font-semibold tracking-normal">记一节课</h1></div>
       <Card>
         <CardHeader className="p-4"><CardTitle className="flex items-center gap-2 text-lg"><BookOpenCheck className="size-5 text-primary" />今天上了什么课？</CardTitle></CardHeader>
@@ -285,8 +299,13 @@ export function QuickClassForm({ initialQuery = {} }: { initialQuery?: ClassPref
         </CardContent>
       </Card>
       <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3"><h2 className="text-base font-semibold">最近课程记录</h2><Select className="w-36 text-sm" value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">全部瑜伽馆</option><option value="unassigned">未归属</option>{studios.map((studio) => <option key={studio.id} value={studio.id}>{studio.name}</option>)}</Select></div>
-        {visibleRecords.length === 0 ? <EmptyState text="还没有课程记录，先记一节课吧～" /> : visibleRecords.slice(0, 12).map((record) => <ClassCard key={record.id} record={record} records={records} studios={studios} members={members} packages={packages} packageItems={packageItems} expanded={expandedIds.includes(record.id)} onToggle={() => setExpandedIds((current) => current.includes(record.id) ? current.filter((id) => id !== record.id) : [...current, record.id])} onEdit={startEdit} onDelete={removeRecord} />)}
+        <h2 className="text-base font-semibold">{monthFilter.replace("-", " 年 ")} 月课程记录</h2>
+        <div className="grid grid-cols-3 gap-2">
+          <Input type="month" value={monthFilter} onChange={(event) => setMonthFilter(event.target.value || currentMonth())} />
+          <Select value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">全部瑜伽馆</option><option value="unassigned">未归属</option>{studios.map((studio) => <option key={studio.id} value={studio.id}>{studio.name}</option>)}</Select>
+          <Select value={memberFilter} onChange={(event) => setMemberFilter(event.target.value)}><option value="">全部会员</option>{members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</Select>
+        </div>
+        {visibleRecords.length === 0 ? <EmptyState text="这个条件下还没有课程记录～" /> : visibleRecords.slice(0, 24).map((record) => <ClassCard key={record.id} record={record} records={records} studios={studios} members={members} packages={packages} packageItems={packageItems} expanded={expandedIds.includes(record.id)} onToggle={() => setExpandedIds((current) => current.includes(record.id) ? current.filter((id) => id !== record.id) : [...current, record.id])} onEdit={startEdit} onDelete={removeRecord} />)}
       </section>
     </div>
   );

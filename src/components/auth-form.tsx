@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, Heart } from "lucide-react";
 import { z } from "zod";
 
@@ -22,6 +22,7 @@ type AuthErrors = Partial<Record<"email" | "phone" | "password" | "confirmPasswo
 
 export function AuthForm({ mode }: { mode: AuthMode }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [method, setMethod] = useState<AuthMethod>("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,6 +32,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   const [needsEmailConfirmation, setNeedsEmailConfirmation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isLogin = mode === "login";
+  const nextPath = searchParams.get("next") || "/mine";
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -59,7 +61,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
       const supabase = createBrowserSupabaseClient();
       if (isLogin) {
         await signInWithEmail(supabase, email, password);
-        router.push("/mine");
+        router.push(nextPath.startsWith("/") ? nextPath : "/mine");
         router.refresh();
       } else {
         const data = await signUpWithEmail(supabase, email, password);

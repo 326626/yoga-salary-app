@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { calculatePackageItemUsage, calculatePackageUsageFromClasses, countPackageRelations, deleteMemberPackage, getPackageDetail, listClassesByPackage, listMembers, listPackageItemsByPackage, listStudios, type PackageItemUsage, type PackageUsage } from "@/lib/data";
-import { mockClasses, mockMembers, mockPackages, mockStudios } from "@/lib/mock-data";
 import { getPackageFinishedMessage, getPackageItemUsageLabel, getPackageUsageLabel, getPackageUsageTone } from "@/lib/packages/usageDisplay";
 import { getPackageDeletePrompt } from "@/lib/relationPrompts";
 import { formatMoney } from "@/lib/salary/formatMoney";
@@ -20,21 +19,25 @@ const courseTypeLabels: Record<string, string> = { group: "团课", private: "�
 
 export function PackageDetailView({ packageId }: { packageId: string }) {
   const [user, setUser] = useState<User | null>(null);
-  const [item, setItem] = useState<MemberPackage | null>(mockPackages.find((record) => record.id === packageId) ?? null);
-  const [members, setMembers] = useState<Member[]>(mockMembers);
-  const [studios, setStudios] = useState<Studio[]>(mockStudios);
+  const [item, setItem] = useState<MemberPackage | null>(null);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [studios, setStudios] = useState<Studio[]>([]);
   const [packageItems, setPackageItems] = useState<PackageItem[]>([]);
-  const [classes, setClasses] = useState<ClassRecord[]>(mockClasses.filter((record) => record.package_id === packageId));
+  const [classes, setClasses] = useState<ClassRecord[]>([]);
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured()) {
+      setLoading(false);
+      return;
+    }
     const supabase = createBrowserSupabaseClient();
     supabase.auth.getSession().then(async ({ data }) => {
       const currentUser = data.session?.user ?? null;
       setUser(currentUser);
       if (!currentUser) {
-        setMessage("当前是体验数据，登录后可以查看你自己的课包详情。");
+        setLoading(false);
         return;
       }
       const [realPackage, realMembers, realStudios, realPackageItems, realClasses] = await Promise.all([
@@ -49,7 +52,11 @@ export function PackageDetailView({ packageId }: { packageId: string }) {
       setStudios(realStudios);
       setPackageItems(realPackageItems);
       setClasses(realClasses);
-    }).catch(() => setMessage("网络好像开小差了，请再试一次～"));
+      setLoading(false);
+    }).catch(() => {
+      setMessage("网络好像开小差了，请再试一次～");
+      setLoading(false);
+    });
   }, [packageId]);
 
   async function removePackage() {
@@ -73,7 +80,7 @@ export function PackageDetailView({ packageId }: { packageId: string }) {
     return (
       <div className="space-y-4">
         <Button asChild variant="ghost" className="px-0"><Link href="/packages"><ArrowLeft className="mr-2 size-4" />返回课包</Link></Button>
-        <Card><CardContent className="p-5 text-sm text-muted-foreground">{message || "没有找到这个课包，可能已经删除或不属于当前账号。"}</CardContent></Card>
+        <Card><CardContent className="p-5 text-sm text-muted-foreground">{loading ? "正在加载你的记录～" : message || "没有找到这个课包，可能已经删除或不属于当前账号。"}</CardContent></Card>
       </div>
     );
   }

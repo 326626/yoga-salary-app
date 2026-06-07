@@ -11,7 +11,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Feedback } from "@/components/ui/feedback";
 import { Select } from "@/components/ui/select";
 import { assignClassesToStudio, assignPackagesToStudio, assignPerformancesToStudio, listMembers, listPackages, listStudios, listUnassignedRecords } from "@/lib/data";
-import { mockMembers, mockPackages, mockStudios } from "@/lib/mock-data";
 import { formatMoney } from "@/lib/salary/formatMoney";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import type { ClassRecord, Member, MemberPackage, Performance, Studio } from "@/types";
@@ -28,9 +27,9 @@ const performanceTypeLabels: Record<string, string> = { new_card: "新办卡", r
 
 export function OrganizeView() {
   const [user, setUser] = useState<User | null>(null);
-  const [studios, setStudios] = useState<Studio[]>(mockStudios);
-  const [members, setMembers] = useState<Member[]>(mockMembers);
-  const [allPackages, setAllPackages] = useState<MemberPackage[]>(mockPackages);
+  const [studios, setStudios] = useState<Studio[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [allPackages, setAllPackages] = useState<MemberPackage[]>([]);
   const [classes, setClasses] = useState<ClassRecord[]>([]);
   const [performances, setPerformances] = useState<Performance[]>([]);
   const [packages, setPackages] = useState<MemberPackage[]>([]);
@@ -38,7 +37,7 @@ export function OrganizeView() {
   const [selection, setSelection] = useState<Selection>(emptySelection);
   const [feedback, setFeedback] = useState("");
   const [tone, setTone] = useState<"success" | "warning" | "error">("success");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   async function loadData(currentUser: User) {
     const supabase = createBrowserSupabaseClient();
@@ -59,15 +58,20 @@ export function OrganizeView() {
   }
 
   useEffect(() => {
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured()) {
+      setLoading(false);
+      return;
+    }
     const supabase = createBrowserSupabaseClient();
     supabase.auth.getSession().then(async ({ data }) => {
       const currentUser = data.session?.user ?? null;
       setUser(currentUser);
       if (currentUser) await loadData(currentUser);
+      setLoading(false);
     }).catch(() => {
       setTone("error");
       setFeedback("网络好像开小差了，请再试一次～");
+      setLoading(false);
     });
   }, []);
 

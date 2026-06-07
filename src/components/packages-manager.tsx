@@ -15,7 +15,6 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { calculateBundlePackagePricing, calculatePackageUsageFromClasses, calculateTotalAmount, calculateUnitPrice, countPackageRelations, createMemberPackage, deleteMemberPackage, listClasses, listMembers, listPackageItems, listPackages, listStudios, updateMemberPackage, type PackageUsage } from "@/lib/data";
-import { mockClasses, mockMembers, mockPackages, mockStudios } from "@/lib/mock-data";
 import { getPackageUsageLabel, getPackageUsageTone } from "@/lib/packages/usageDisplay";
 import { filterPackagesByStudioAndMember, getPackageFilterEmptyMessage, type PackageStudioFilter } from "@/lib/packages/packageFilters";
 import { getPackageDeletePrompt } from "@/lib/relationPrompts";
@@ -41,9 +40,9 @@ const courseTypeLabels: Record<CourseType, string> = {
 const todayString = () => new Date().toISOString().slice(0, 10);
 const initialForm = (): PackageForm => ({
   package_mode: "single",
-  member_id: mockMembers[0]?.id ?? "",
+  member_id: "",
   teacher_id: "",
-  studio_id: mockStudios[0]?.id ?? "",
+  studio_id: "",
   pricing_mode: "total_amount",
   package_name: "",
   course_type: "private",
@@ -59,12 +58,12 @@ const emptyPackageItem = () => ({ item_name: "", course_type: "private" as Cours
 
 export function PackagesManager({ initialMemberId, initialEditId, initialStudioId }: { initialMemberId?: string; initialEditId?: string; initialStudioId?: string }) {
   const [user, setUser] = useState<User | null>(null);
-  const [members, setMembers] = useState<Member[]>(mockMembers);
-  const [studios, setStudios] = useState<Studio[]>(mockStudios);
-  const [packages, setPackages] = useState<MemberPackage[]>(mockPackages);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [studios, setStudios] = useState<Studio[]>([]);
+  const [packages, setPackages] = useState<MemberPackage[]>([]);
   const [packageItems, setPackageItems] = useState<PackageItem[]>([]);
   const [bundleItems, setBundleItems] = useState<Array<ReturnType<typeof emptyPackageItem>>>([emptyPackageItem()]);
-  const [classes, setClasses] = useState<ClassRecord[]>(mockClasses);
+  const [classes, setClasses] = useState<ClassRecord[]>([]);
   const [form, setForm] = useState<PackageForm>(initialForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(Boolean(initialMemberId || initialEditId));
@@ -74,14 +73,21 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
   const [errors, setErrors] = useState<FieldErrors>({});
   const [feedback, setFeedback] = useState("");
   const [tone, setTone] = useState<"success" | "warning" | "error">("success");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured()) {
+      setLoading(false);
+      return;
+    }
     const supabase = createBrowserSupabaseClient();
     supabase.auth.getSession().then(async ({ data }) => {
       const currentUser = data.session?.user ?? null;
       setUser(currentUser);
-      if (!currentUser) return;
+      if (!currentUser) {
+        setLoading(false);
+        return;
+      }
       const [realMembers, realStudios, realPackages, realPackageItems, realClasses] = await Promise.all([
         listMembers(supabase, currentUser.id),
         listStudios(supabase, currentUser.id),
@@ -98,9 +104,13 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
       const preferredStudioId = realStudios.some((studio) => studio.id === initialStudioId) ? initialStudioId : realStudios[0]?.id;
       const memberStudioId = realMembers.find((member) => member.id === preferredMemberId)?.studio_id;
       setForm((current) => ({ ...current, member_id: preferredMemberId ?? "", studio_id: memberStudioId ?? preferredStudioId ?? "" }));
+      setStudioFilter(realStudios.some((studio) => studio.id === initialStudioId) ? initialStudioId ?? "all" : "all");
+      setMemberFilter(realMembers.some((member) => member.id === initialMemberId) ? initialMemberId ?? "" : "");
+      setLoading(false);
     }).catch(() => {
       setTone("error");
       setFeedback("网络好像开小差了，请再试一次～");
+      setLoading(false);
     });
   }, [initialMemberId, initialStudioId]);
 
@@ -275,6 +285,7 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
 
   return (
     <div className="space-y-5">
+      {loading ? <div className="rounded-3xl bg-card/80 p-5 text-sm text-muted-foreground">正在加载你的记录～</div> : null}
       <header className="space-y-2">
         <p className="text-sm text-muted-foreground">课包 / 订单</p>
         <h1 className="text-2xl font-semibold tracking-normal">管理会员课包</h1>

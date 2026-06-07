@@ -14,7 +14,6 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { calculatePackageUsageFromClasses, createMemberPackage, getMemberDetail, listClassesByMember, listPackageItems, listPackages, listPerformancesByMember, listStudios, type PackageUsage } from "@/lib/data";
-import { mockClasses, mockMembers, mockPackages, mockPerformances, mockStudios } from "@/lib/mock-data";
 import { getPackageUsageLabel, getPackageUsageTone } from "@/lib/packages/usageDisplay";
 import { formatMoney } from "@/lib/salary/formatMoney";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
@@ -42,15 +41,16 @@ type MemberPackageMiniFormState = {
 
 export function MemberDetailView({ memberId }: { memberId: string }) {
   const [user, setUser] = useState<User | null>(null);
-  const [member, setMember] = useState<Member | null>(mockMembers.find((item) => item.id === memberId) ?? null);
-  const [packages, setPackages] = useState<MemberPackage[]>(mockPackages.filter((item) => item.member_id === memberId));
+  const [member, setMember] = useState<Member | null>(null);
+  const [packages, setPackages] = useState<MemberPackage[]>([]);
   const [packageItems, setPackageItems] = useState<PackageItem[]>([]);
-  const [studios, setStudios] = useState<Studio[]>(mockStudios);
-  const [classes, setClasses] = useState<ClassRecord[]>(mockClasses.filter((item) => item.member_id === memberId));
-  const [performances, setPerformances] = useState<Performance[]>(mockPerformances.filter((item) => item.member_id === memberId));
+  const [studios, setStudios] = useState<Studio[]>([]);
+  const [classes, setClasses] = useState<ClassRecord[]>([]);
+  const [performances, setPerformances] = useState<Performance[]>([]);
   const [message, setMessage] = useState("");
   const [activeTab, setActiveTab] = useState<MemberDetailTab>("课包记录");
   const [isPackageFormOpen, setIsPackageFormOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [packageForm, setPackageForm] = useState<MemberPackageMiniFormState>({
     member_id: memberId,
     teacher_id: "",
@@ -66,13 +66,16 @@ export function MemberDetailView({ memberId }: { memberId: string }) {
   });
 
   useEffect(() => {
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured()) {
+      setLoading(false);
+      return;
+    }
     const supabase = createBrowserSupabaseClient();
     supabase.auth.getSession().then(async ({ data }) => {
       const currentUser = data.session?.user ?? null;
       setUser(currentUser);
       if (!currentUser) {
-        setMessage("当前是体验数据，登录后可以查看你自己的会员详情。");
+        setLoading(false);
         return;
       }
       const [realMember, allPackages, allPackageItems, realClasses, realPerformances, realStudios] = await Promise.all([
@@ -90,7 +93,11 @@ export function MemberDetailView({ memberId }: { memberId: string }) {
       setPerformances(realPerformances);
       setStudios(realStudios);
       setPackageForm((current) => ({ ...current, member_id: memberId, studio_id: realMember?.studio_id ?? "" }));
-    }).catch(() => setMessage("网络好像开小差了，请再试一次～"));
+      setLoading(false);
+    }).catch(() => {
+      setMessage("网络好像开小差了，请再试一次～");
+      setLoading(false);
+    });
   }, [memberId]);
 
   function updatePackageField(name: keyof typeof packageForm, value: string) {
@@ -144,7 +151,7 @@ export function MemberDetailView({ memberId }: { memberId: string }) {
         </Button>
         <Card>
           <CardContent className="space-y-3 p-5 text-sm text-muted-foreground">
-            <p>没有找到这位会员，可能已经删除或不属于当前账号。</p>
+            <p>{loading ? "正在加载你的记录～" : "没有找到这位会员，可能已经删除或不属于当前账号。"}</p>
             {!user ? <Button asChild className="w-full"><Link href="/login">去登录</Link></Button> : null}
           </CardContent>
         </Card>
@@ -179,7 +186,7 @@ export function MemberDetailView({ memberId }: { memberId: string }) {
           </button>
         ))}
       </div>
-      <Feedback message={message.includes("体验数据") ? "" : message} tone={message.includes("失败") ? "error" : "success"} />
+      <Feedback message={message} tone={message.includes("失败") ? "error" : "success"} />
 
       {activeTab === "课包记录" ? (
         <section className="space-y-3">
