@@ -4,11 +4,13 @@ import { structuredSalaryRuleSchema } from "@/lib/validation";
 import type { StructuredSalaryRule } from "@/types";
 
 import { parseSalaryRuleText } from "./parseSalaryRule";
+import { deepSeekVisionProvider, type SalaryRuleVisionImage } from "./visionProvider";
 
 export type RuleConversationInput = {
   rawText?: string;
   supplementalMessage?: string;
   extractedTexts?: string[];
+  images?: SalaryRuleVisionImage[];
   previousStructuredRule?: StructuredSalaryRule | null;
 };
 
@@ -25,8 +27,28 @@ export function buildRuleConversationText(input: RuleConversationInput) {
 
 export async function parseRuleConversation(input: RuleConversationInput) {
   const text = buildRuleConversationText(input).trim();
-  if (!text) {
+  const images = input.images ?? [];
+  if (!text && images.length === 0) {
     throw new Error("请先输入工资规则或上传可识别的文本文件～");
+  }
+
+  if (images.length > 0) {
+    const parsed = await deepSeekVisionProvider.parseSalaryRuleWithVision({
+      text,
+      images,
+      extractedTexts: input.extractedTexts,
+      previousStructuredRule: input.previousStructuredRule
+    });
+    const validation = structuredSalaryRuleSchema.safeParse(parsed.structured_rule);
+    if (!validation.success) {
+      throw new Error("规则有点复杂，可以手动调整一下～");
+    }
+    return {
+      structured_rule: validation.data,
+      uncertain_items: validation.data.uncertain_items,
+      assistant_message: "我已经根据你发的文字和图片整理出一版规则草稿～",
+      message: parsed.message
+    };
   }
 
   const parsed = await parseSalaryRuleText(text, undefined, {

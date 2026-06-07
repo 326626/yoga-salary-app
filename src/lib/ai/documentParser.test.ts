@@ -15,12 +15,18 @@ describe("rule document parser", () => {
     expect(result.documents[0].extractedText).toContain("团课");
   });
 
-  it("accepts images but returns OCR friendly message", async () => {
-    const file = new File(["image"], "rule.png", { type: "image/png" });
+  it("accepts images and prepares data URLs for vision model", async () => {
+    const file = {
+      name: "rule.png",
+      type: "image/png",
+      size: 5,
+      arrayBuffer: async () => new TextEncoder().encode("image").buffer
+    } as File;
     const result = await parseRuleDocuments([file]);
 
     expect(result.documents[0].extractedText).toBe("");
-    expect(result.messages[0]).toContain("图片识别能力正在接入中");
+    expect(result.documents[0].imageDataUrl).toMatch(/^data:image\/png;base64,/);
+    expect(result.messages).toEqual([]);
   });
 
   it("rejects unsupported files", () => {

@@ -49,6 +49,7 @@ npm install
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 DEEPSEEK_API_KEY=
+DEEPSEEK_VISION_MODEL=deepseek-v4-pro
 ```
 
 不要填写 service role key、secret key 或任何 Supabase secret 类型的 key。
@@ -143,4 +144,5 @@ Authentication → URL Configuration
 - 登录后跳不回来：检查 Supabase Auth Redirect URLs。
 - 保存失败：确认已执行最新 `supabase/schema.sql`，并启用 RLS policy。
 - DeepSeek 识别失败：检查 `DEEPSEEK_API_KEY` 是否只在服务端环境中配置，不能加 `NEXT_PUBLIC_`。
+- 图片工资规则识别失败：检查 `DEEPSEEK_VISION_MODEL` 是否配置为支持图片输入的模型，例如 `deepseek-v4-pro`。
 - 服务器内存紧张：关闭不必要服务，保持 Supabase 使用云端，不要在 2 核 2G 上自建数据库全家桶。

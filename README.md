@@ -79,6 +79,7 @@ npm test
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 DEEPSEEK_API_KEY=
+DEEPSEEK_VISION_MODEL=deepseek-v4-pro
 ```
 
 说明：
@@ -86,6 +87,7 @@ DEEPSEEK_API_KEY=
 - `NEXT_PUBLIC_SUPABASE_URL` 可公开，用于浏览器 Supabase client。
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` 使用 Supabase Publishable / anon key，可在浏览器使用，依赖 RLS 保护数据。
 - `DEEPSEEK_API_KEY` 只能服务端使用，不能加 `NEXT_PUBLIC_`，不能在前端引用，不能打印。
+- `DEEPSEEK_VISION_MODEL` 用于工资规则图片识别，默认可填 `deepseek-v4-pro`；不配置时服务端会 fallback 到默认 Vision 模型。
 - 不要配置 Supabase service role key。
 - 不要配置 Supabase secret key。
 - 不要配置任何 Supabase secret 前缀形式的 key。
@@ -289,16 +291,17 @@ end $$;
 
 ## DeepSeek 工资规则识别
 
-文本工资规则识别通过服务端 Route Handler 调用 DeepSeek，浏览器端不会直接读取或使用 `DEEPSEEK_API_KEY`。
+文本和图片工资规则识别都通过服务端 Route Handler 调用 DeepSeek，浏览器端不会直接读取或使用 `DEEPSEEK_API_KEY`。
 
 当前默认使用 OpenAI-compatible 调用方式：
 
 - `baseURL`: `https://api.deepseek.com`
-- `model`: `deepseek-v4-flash`
+- 文本模型：`deepseek-v4-flash`
+- 图片模型：`DEEPSEEK_VISION_MODEL`，建议 `deepseek-v4-pro`
 
 如果本地暂时没有配置 `DEEPSEEK_API_KEY`，开发环境会使用示例识别 fallback；生产环境会返回友好提示，不会让构建失败。
 
-图片识别工资规则的入口已经预留：支持选择 JPG、PNG、WEBP，最大 5MB。当前 Vision/OCR Provider 未启用时，会提示先复制图片中的文字进行文本识别。后续可以替换为 DeepSeek Vision、OCR 服务、OpenAI Vision、Claude Vision 或其他 Provider。
+图片识别工资规则支持 JPG、PNG、WEBP，单个文件最大 5MB，最多 5 个文件。图片只在请求过程中临时转为 data URL 传给服务端 DeepSeek Vision 模型，不保存到数据库或 Supabase Storage。AI 识别结果仍需通过 Zod 校验，并且必须由用户确认后才会保存为 active 工资规则。
 
 ## PWA 基础说明
 
@@ -339,7 +342,6 @@ end $$;
 
 ## 当前暂未实现
 
-- 图片真实 OCR / Vision 识别
 - 导出 PDF / 图片
 - 多用户组织权限
 - 老板端 / 审批流

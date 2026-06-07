@@ -32,26 +32,26 @@ export async function POST(request: Request) {
   try {
     const documents = await parseRuleDocuments(files);
     const extractedTexts = documents.documents.map((item) => item.extractedText).filter(Boolean);
-    const hasTextInput = rawText.trim() || supplementalMessage.trim() || previousStructuredRule || extractedTexts.length > 0;
-    if (!hasTextInput && documents.messages[0]) {
-      return NextResponse.json({
-        ok: false,
-        message: documents.messages[0],
-        assistant_message: documents.messages[0]
-      });
-    }
+    const images = documents.documents
+      .filter((item) => item.imageDataUrl)
+      .map((item) => ({
+        fileName: item.fileName,
+        mimeType: item.fileType,
+        dataUrl: item.imageDataUrl ?? ""
+      }));
 
     const result = await parseRuleConversation({
       rawText,
       supplementalMessage,
       extractedTexts,
+      images,
       previousStructuredRule
     });
     return NextResponse.json({
       ok: true,
       structured_rule: result.structured_rule,
       uncertain_items: result.uncertain_items,
-      assistant_message: documents.messages[0] ?? result.assistant_message,
+      assistant_message: result.assistant_message,
       message: result.message
     });
   } catch (error) {

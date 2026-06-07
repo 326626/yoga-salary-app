@@ -2,7 +2,7 @@ import "server-only";
 
 export class OcrProviderNotSupportedError extends Error {
   constructor() {
-    super("图片识别能力正在接入中，可以先把图片里的文字复制到补充说明里～");
+    super("当前模型暂时没有成功识别图片，可以把图片里的文字发给我，我继续帮你整理～");
     this.name = "OcrProviderNotSupportedError";
   }
 }

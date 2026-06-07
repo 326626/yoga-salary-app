@@ -1,5 +1,7 @@
 import "server-only";
 
+import { Buffer } from "node:buffer";
+
 export const MAX_AI_RULE_FILE_SIZE = 5 * 1024 * 1024;
 export const MAX_AI_RULE_FILE_COUNT = 5;
 
@@ -12,6 +14,7 @@ export type ParsedRuleDocument = {
   fileType: string;
   size: number;
   extractedText: string;
+  imageDataUrl?: string;
   message?: string;
 };
 
@@ -47,9 +50,13 @@ export async function parseRuleDocuments(files: File[]): Promise<{ documents: Pa
     }
 
     if (imageRuleDocumentTypes.includes(file.type as (typeof imageRuleDocumentTypes)[number])) {
-      const message = "图片识别能力正在接入中，可以先把图片里的文字复制到补充说明里～";
-      documents.push({ fileName: file.name, fileType: file.type, size: file.size, extractedText: "", message });
-      messages.push(message);
+      documents.push({
+        fileName: file.name,
+        fileType: file.type,
+        size: file.size,
+        extractedText: "",
+        imageDataUrl: await readImageDataUrl(file)
+      });
     }
   }
 
@@ -62,4 +69,10 @@ async function readFileText(file: File) {
     return new TextDecoder().decode(await file.arrayBuffer());
   }
   return new Response(file).text();
+}
+
+async function readImageDataUrl(file: File) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const base64 = Buffer.from(bytes).toString("base64");
+  return `data:${file.type};base64,${base64}`;
 }
