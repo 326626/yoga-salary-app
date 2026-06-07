@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { authLoginInputSchema, authSignupInputSchema, loginInputSchema, signupInputSchema } from "./schemas";
+import { loginInputSchema, signupInputSchema } from "./schemas";
 
 describe("auth input schemas", () => {
   it("accepts valid email and password", () => {
@@ -25,26 +25,4 @@ describe("auth input schemas", () => {
     ).toBe(false);
   });
 
-  it("accepts valid email auth mode input", () => {
-    expect(authLoginInputSchema.safeParse({ method: "email", email: "teacher@example.com", password: "123456" }).success).toBe(true);
-  });
-
-  it("accepts valid phone auth mode input", () => {
-    expect(authLoginInputSchema.safeParse({ method: "phone", phone: "13800138000", password: "123456" }).success).toBe(true);
-  });
-
-  it("rejects invalid phone auth mode input", () => {
-    expect(authLoginInputSchema.safeParse({ method: "phone", phone: "12800138000", password: "123456" }).success).toBe(false);
-  });
-
-  it("rejects auth signup when confirmPassword does not match", () => {
-    expect(
-      authSignupInputSchema.safeParse({
-        method: "phone",
-        phone: "13800138000",
-        password: "123456",
-        confirmPassword: "abcdef"
-      }).success
-    ).toBe(false);
-  });
 });

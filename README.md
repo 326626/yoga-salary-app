@@ -107,27 +107,23 @@ DEEPSEEK_API_KEY=
 当前支持：
 
 - 邮箱 + 密码注册 / 登录
-- 手机号 + 密码注册 / 登录
+- 手机号验证码登录入口预留，当前暂不开放
 
 邮箱注册：
 
 - 如果 Supabase 开启了邮箱确认，注册成功后用户需要先打开邮箱，点击确认链接，再回来登录。
 - 如果登录失败，先检查邮箱是否已经确认。
 
-手机号 + 密码：
+手机号登录：
 
-- 本阶段不支持短信验证码登录。
-- 不需要 SMS OTP。
+- 当前正式登录方式是邮箱 + 密码。
+- 手机号验证码登录计划后续支持。
+- 当前不支持手机号 + 密码注册 / 登录。
+- 当前不接 SMS Provider。
+- 当前不使用 SMS OTP。
 - 不生成 fake email。
 - 不把手机号或密码存入业务表。
 - 仍然使用 Supabase Auth 的 `user.id` 作为业务表 `user_id`。
-- 如果 Supabase 控制台没有启用 Phone provider，页面会提示“当前手机号注册暂不可用，可以先使用邮箱注册～”。
-
-如需启用手机号 + 密码，请在 Supabase Dashboard 中检查：
-
-Authentication -> Providers -> Phone
-
-根据 Supabase 项目能力启用 Phone provider。不同 Supabase 项目设置可能略有差异；如果暂时不启用，用户可以继续使用邮箱注册 / 登录。
 
 当前完整 schema 包含：
 
@@ -177,9 +173,9 @@ http://localhost:3001/**
 
 5. Phone Auth：
 
-- 如果要使用手机号 + 密码登录，请启用 Phone provider。
-- 当前 App 不使用短信验证码，不需要配置 SMS OTP 流程。
-- 如果 Phone provider 未启用，手机号注册 / 登录会显示友好提示，邮箱方式不受影响。
+- 当前暂不开放手机号登录 / 注册。
+- 后续接入手机号验证码时，再启用 Phone provider 和 SMS 配置。
+- 当前不要把手机号 + 密码作为正式入口。
 
 ### 上线前数据库检查
 

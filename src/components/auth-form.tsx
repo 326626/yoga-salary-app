@@ -12,9 +12,9 @@ import { Feedback } from "@/components/ui/feedback";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { signInWithEmail, signInWithPhone, signUpWithEmail, signUpWithPhone } from "@/lib/supabase/auth";
+import { signInWithEmail, signUpWithEmail } from "@/lib/supabase/auth";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
-import { authLoginInputSchema, authSignupInputSchema } from "@/lib/validation";
+import { loginInputSchema, signupInputSchema } from "@/lib/validation";
 
 type AuthMode = "login" | "signup";
 type AuthMethod = "email" | "phone";
@@ -24,7 +24,6 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   const router = useRouter();
   const [method, setMethod] = useState<AuthMethod>("email");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [errors, setErrors] = useState<AuthErrors>({});
@@ -37,11 +36,13 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
     event.preventDefault();
     setMessage("");
     setNeedsEmailConfirmation(false);
-    const schema = isLogin ? authLoginInputSchema : authSignupInputSchema;
-    const payload = method === "email"
-      ? isLogin ? { method, email, password } : { method, email, password, confirmPassword }
-      : isLogin ? { method, phone, password } : { method, phone, password, confirmPassword };
-    const result = schema.safeParse(payload);
+    if (method === "phone") {
+      setMessage("手机号验证码登录即将支持～");
+      setErrors({});
+      return;
+    }
+    const schema = isLogin ? loginInputSchema : signupInputSchema;
+    const result = schema.safeParse(isLogin ? { email, password } : { email, password, confirmPassword });
 
     if (!result.success) {
       setErrors(toFieldErrors(result.error));
@@ -57,27 +58,18 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
     try {
       const supabase = createBrowserSupabaseClient();
       if (isLogin) {
-        if (method === "email") {
-          await signInWithEmail(supabase, email, password);
-        } else {
-          await signInWithPhone(supabase, phone, password);
-        }
+        await signInWithEmail(supabase, email, password);
         router.push("/mine");
         router.refresh();
       } else {
-        if (method === "email") {
-          const data = await signUpWithEmail(supabase, email, password);
-          if (data.session) {
-            setMessage("注册成功啦，已经为你登录～");
-            router.push("/mine");
-            router.refresh();
-          } else {
-            setNeedsEmailConfirmation(true);
-            setMessage("注册邮件已经发出啦～");
-          }
+        const data = await signUpWithEmail(supabase, email, password);
+        if (data.session) {
+          setMessage("注册成功啦，已经为你登录～");
+          router.push("/mine");
+          router.refresh();
         } else {
-          await signUpWithPhone(supabase, phone, password);
-          setMessage("手机号注册成功啦，可以登录使用～");
+          setNeedsEmailConfirmation(true);
+          setMessage("注册邮件已经发出啦～");
         }
       }
     } catch (error) {
@@ -115,7 +107,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         <CardHeader className="p-4">
           <CardTitle className="flex items-center gap-2 text-lg">
             <Heart className="size-5 text-primary" aria-hidden="true" />
-            {isLogin ? (method === "email" ? "用邮箱登录" : "用手机号登录") : method === "email" ? "用邮箱注册" : "用手机号注册"}
+            {isLogin ? (method === "email" ? "用邮箱登录" : "手机号验证码登录即将支持") : method === "email" ? "用邮箱注册" : "手机号验证码注册即将支持"}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-4 pt-0">
@@ -125,7 +117,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
               <button type="button" className={cn("min-h-11 rounded-xl text-sm font-medium", method === "email" && "bg-card text-primary shadow-sm")} onClick={() => { setMethod("email"); setErrors({}); setMessage(""); }}>
                 邮箱
               </button>
-              <button type="button" className={cn("min-h-11 rounded-xl text-sm font-medium", method === "phone" && "bg-card text-primary shadow-sm")} onClick={() => { setMethod("phone"); setErrors({}); setMessage(""); }}>
+              <button type="button" className={cn("min-h-11 rounded-xl text-sm font-medium text-muted-foreground", method === "phone" && "bg-card text-primary shadow-sm")} onClick={() => { setMethod("phone"); setErrors({}); setMessage("手机号验证码登录即将支持～"); }}>
                 手机号
               </button>
             </div>
@@ -134,23 +126,25 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
                 <Input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" />
               </Field>
             ) : (
-              <Field label="手机号" error={errors.phone}>
-                <Input type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="13800138000" />
-              </Field>
+              <div className="rounded-3xl bg-secondary/70 p-4 text-sm leading-6 text-muted-foreground">
+                手机号验证码登录即将支持～ 当前请先使用邮箱注册 / 登录。
+              </div>
             )}
-            <Field label="密码" error={errors.password}>
-              <Input type="password" autoComplete={isLogin ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="至少 6 位" />
-            </Field>
-            {!isLogin ? (
+            {method === "email" ? (
+              <Field label="密码" error={errors.password}>
+                <Input type="password" autoComplete={isLogin ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="至少 6 位" />
+              </Field>
+            ) : null}
+            {!isLogin && method === "email" ? (
               <Field label="确认密码" error={errors.confirmPassword}>
                 <Input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="再输入一次密码" />
               </Field>
             ) : null}
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "处理中..." : isLogin ? (method === "email" ? "用邮箱登录" : "用手机号登录") : method === "email" ? "用邮箱注册" : "用手机号注册"}
+            <Button type="submit" className="w-full" disabled={isSubmitting || method === "phone"}>
+              {isSubmitting ? "处理中..." : isLogin ? (method === "email" ? "用邮箱登录" : "手机号验证码登录即将支持") : method === "email" ? "用邮箱注册" : "手机号验证码注册即将支持"}
             </Button>
             {isLogin && method === "email" ? <p className="text-xs leading-5 text-muted-foreground">如果刚刚注册，请先去邮箱点击确认链接。</p> : null}
-            {method === "phone" ? <p className="text-xs leading-5 text-muted-foreground">本阶段使用手机号 + 密码，不使用短信验证码。若暂不可用，可以先用邮箱注册～</p> : null}
+            {method === "phone" ? <p className="text-xs leading-5 text-muted-foreground">后续会接入短信验证码登录；现在不会使用手机号 + 密码注册或登录。</p> : null}
           </form>
           <div className="mt-4 text-center text-sm text-muted-foreground">
             {isLogin ? (

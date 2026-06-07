@@ -42,8 +42,8 @@ export default function RootLayout({
               </div>
             </header>
             <main className="px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-5">{children}</main>
-            <BottomTabNav />
           </div>
+          <BottomTabNav />
         </div>
       </body>
     </html>
