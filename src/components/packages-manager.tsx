@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
-import { PenLine, ShoppingBag, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, PenLine, ShoppingBag, Trash2 } from "lucide-react";
 import { z } from "zod";
 
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,7 @@ import { calculatePackageUsageFromClasses, calculateTotalAmount, calculateUnitPr
 import { mockClasses, mockMembers, mockPackages, mockStudios } from "@/lib/mock-data";
 import { getPackageUsageLabel, getPackageUsageTone } from "@/lib/packages/usageDisplay";
 import { getPackageDeletePrompt } from "@/lib/relationPrompts";
+import { buildPackageSummary } from "@/lib/records/recordSummaries";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { createMemberPackageInputSchema } from "@/lib/validation";
 import type { ClassRecord, CourseType, Member, MemberPackage, Studio } from "@/types";
@@ -59,6 +60,8 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
   const [classes, setClasses] = useState<ClassRecord[]>(mockClasses);
   const [form, setForm] = useState<PackageForm>(initialForm);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(Boolean(initialMemberId || initialEditId));
+  const [expandedIds, setExpandedIds] = useState<string[]>([]);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [feedback, setFeedback] = useState("");
   const [tone, setTone] = useState<"success" | "warning" | "error">("success");
@@ -145,6 +148,7 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
 
   function startEdit(item: MemberPackage) {
     setEditingId(item.id);
+    setIsFormOpen(true);
     setForm({
       member_id: item.member_id,
       teacher_id: item.teacher_id ?? "",
@@ -165,6 +169,7 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
     setEditingId(null);
     setForm({ ...initialForm(), member_id: members[0]?.id ?? "", studio_id: members[0]?.studio_id ?? studios[0]?.id ?? "" });
     setErrors({});
+    setIsFormOpen(false);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -191,7 +196,7 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
       } else {
         const created = await createMemberPackage(supabase, user.id, result.data);
         setPackages((current) => [created, ...current]);
-        setFeedback(initialMemberId ? "课包已添加～" : "课包已保存，单节成交价也算好啦～");
+        setFeedback("课包已添加～");
       }
       setTone("success");
       resetForm();
@@ -254,7 +259,13 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
         </Card>
       ) : null}
 
-      <Card>
+      {user && members.length > 0 && !isFormOpen ? (
+        <Button className="w-full" onClick={() => setIsFormOpen(true)}>
+          新增课包
+        </Button>
+      ) : null}
+
+      {isFormOpen ? <Card>
         <CardHeader className="p-4">
           <CardTitle className="flex items-center gap-2 text-lg">
             <ShoppingBag className="size-5 text-primary" />
@@ -327,21 +338,25 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
                 <Button type="button" variant="secondary" onClick={resetForm}>
                   取消编辑
                 </Button>
-              ) : null}
-              <Button type="submit" className={editingId ? "" : "col-span-2"} disabled={user !== null && members.length === 0}>
+              ) : (
+                <Button type="button" variant="secondary" onClick={resetForm}>
+                  取消
+                </Button>
+              )}
+              <Button type="submit" disabled={user !== null && members.length === 0}>
                 {editingId ? "保存修改" : "保存课包"}
               </Button>
             </div>
           </form>
         </CardContent>
-      </Card>
+      </Card> : null}
 
       <section className="space-y-3">
         <h2 className="text-base font-semibold">课包列表</h2>
         {packages.length === 0 ? (
           <EmptyState text="还没有课包，私教课建议先添加课包～" />
         ) : (
-            packages.map((item) => <PackageCard key={item.id} item={item} members={members} studios={studios} usage={usages[item.id]} onEdit={startEdit} onDelete={removePackage} />)
+            packages.map((item) => <PackageCard key={item.id} item={item} members={members} studios={studios} usage={usages[item.id]} classes={classes} expanded={expandedIds.includes(item.id)} onToggle={() => setExpandedIds((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} onEdit={startEdit} onDelete={removePackage} />)
         )}
       </section>
     </div>
@@ -353,6 +368,9 @@ function PackageCard({
   members,
   studios,
   usage,
+  classes,
+  expanded,
+  onToggle,
   onEdit,
   onDelete
 }: {
@@ -360,46 +378,55 @@ function PackageCard({
   members: Member[];
   studios: Studio[];
   usage?: PackageUsage;
+  classes: ClassRecord[];
+  expanded: boolean;
+  onToggle: () => void;
   onEdit: (item: MemberPackage) => void;
   onDelete: (item: MemberPackage) => void;
 }) {
-  const memberName = members.find((member) => member.id === item.member_id)?.name ?? "会员";
-  const studioName = studios.find((studio) => studio.id === item.studio_id)?.name;
+  const summary = buildPackageSummary({ item, members, studios, remainingLabel: usage ? getPackageUsageLabel(usage) : "未统计" });
+  const relatedClasses = classes.filter((record) => record.package_id === item.id).slice(0, 3);
 
   return (
     <article className="space-y-4 rounded-3xl border border-white/70 bg-card/90 p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
+      <button type="button" className="flex min-h-16 w-full items-start justify-between gap-3 text-left" onClick={onToggle}>
         <div>
-          <p className="text-sm text-muted-foreground">{memberName}</p>
-          <Link href={`/packages/${item.id}`} className="mt-1 block font-medium text-foreground">
-            {item.package_name}
-          </Link>
+          <p className="text-sm text-muted-foreground">{summary.title}</p>
+          <h3 className="mt-1 font-medium text-foreground">{summary.subtitle}</h3>
+          <p className="mt-1 text-sm font-medium text-primary">{summary.meta}</p>
         </div>
-        <div className="flex gap-2">
-          <Button type="button" variant="secondary" size="icon" aria-label="编辑课包" onClick={() => onEdit(item)}>
-            <PenLine className="size-4" />
-          </Button>
-          <Button type="button" variant="outline" size="icon" aria-label="删除课包" onClick={() => onDelete(item)}>
-            <Trash2 className="size-4" />
-          </Button>
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Badge>{courseTypeLabels[item.course_type]}</Badge>
-        {studioName ? <Badge>{studioName}</Badge> : null}
-        <Badge>{item.purchase_date}</Badge>
-      </div>
-      <div className="grid grid-cols-3 gap-2 text-sm">
-        <AmountPill label="总成交金额" value={`¥${item.total_amount.toFixed(2)}`} />
-        <AmountPill label="课时" value={`${item.total_sessions}`} />
-        <AmountPill label="客单价" value={`¥${item.unit_price.toFixed(2)}`} strong />
-      </div>
+        {expanded ? <ChevronUp className="mt-1 size-5 text-muted-foreground" /> : <ChevronDown className="mt-1 size-5 text-muted-foreground" />}
+      </button>
       {usage ? <UsageStrip usage={usage} /> : null}
-      {item.course_type === "private" ? <p className="rounded-2xl bg-secondary/70 px-3 py-2 text-sm text-muted-foreground">私教工资会优先使用这个单节成交价。</p> : null}
-      <Button asChild variant="secondary" className="w-full">
-        <Link href={`/classes?memberId=${item.member_id}&packageId=${item.id}&studioId=${item.studio_id ?? ""}&courseType=private`}>用这个课包记一节课</Link>
-      </Button>
-      {item.note ? <p className="text-sm text-muted-foreground">{item.note}</p> : null}
+      {expanded ? (
+        <div className="space-y-3 border-t border-white/70 pt-3">
+          <div className="flex flex-wrap gap-2">
+            <Badge>{courseTypeLabels[item.course_type]}</Badge>
+            <Badge>{item.purchase_date}</Badge>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-sm">
+            <AmountPill label="总成交金额" value={`¥${item.total_amount.toFixed(2)}`} />
+            <AmountPill label="总课时" value={`${item.total_sessions}`} />
+            <AmountPill label="已上" value={`${usage?.usedSessions ?? 0}`} />
+          </div>
+          {relatedClasses.length > 0 ? (
+            <div className="rounded-3xl bg-secondary/70 p-3 text-sm text-muted-foreground">
+              <div className="mb-2 font-medium text-foreground">最近消课</div>
+              <div className="space-y-1">
+                {relatedClasses.map((record) => <p key={record.id}>{record.date} · {record.course_name} · {record.hours} 节</p>)}
+              </div>
+            </div>
+          ) : null}
+          {item.note ? <p className="rounded-2xl bg-muted/70 px-3 py-2 text-sm text-muted-foreground">{item.note}</p> : null}
+          <div className="grid grid-cols-2 gap-2">
+            <Button type="button" variant="secondary" size="sm" onClick={() => onEdit(item)}><PenLine className="mr-2 size-4" />编辑</Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => onDelete(item)}><Trash2 className="mr-2 size-4" />删除</Button>
+          </div>
+          <Button asChild variant="secondary" className="w-full">
+            <Link href={`/classes?memberId=${item.member_id}&packageId=${item.id}&studioId=${item.studio_id ?? ""}&courseType=private`}>用这个课包记一节课</Link>
+          </Button>
+        </div>
+      ) : null}
     </article>
   );
 }

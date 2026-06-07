@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
-import { AlertCircle, BookOpenCheck } from "lucide-react";
+import { AlertCircle, BookOpenCheck, ChevronDown, ChevronUp } from "lucide-react";
 import { z } from "zod";
 
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,7 @@ import { calculatePackageUsageFromClasses, createClassRecord, createDefaultTeach
 import { mockClasses, mockMembers, mockPackages, mockStudios, mockTeachers } from "@/lib/mock-data";
 import { buildOveruseWarning, getPackageFinishedMessage, getPackageUsageLabel, getPackageUsageTone } from "@/lib/packages/usageDisplay";
 import { filterClassesByStudio, type StudioRecordFilter } from "@/lib/records/recordFilters";
+import { buildClassSummary } from "@/lib/records/recordSummaries";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { createClassRecordInputSchema } from "@/lib/validation";
 import type { ClassRecord, CourseType, Member, MemberPackage, Studio, Teacher } from "@/types";
@@ -54,6 +55,7 @@ export function QuickClassForm({ initialQuery = {} }: { initialQuery?: ClassPref
   const [teacherTouched, setTeacherTouched] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<StudioRecordFilter>("all");
+  const [expandedIds, setExpandedIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
@@ -267,7 +269,7 @@ export function QuickClassForm({ initialQuery = {} }: { initialQuery?: ClassPref
       </Card>
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3"><h2 className="text-base font-semibold">最近课程记录</h2><Select className="w-36 text-sm" value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">全部瑜伽馆</option><option value="unassigned">未归属</option>{studios.map((studio) => <option key={studio.id} value={studio.id}>{studio.name}</option>)}</Select></div>
-        {visibleRecords.length === 0 ? <EmptyState text="还没有课程记录，先记一节课吧～" /> : visibleRecords.slice(0, 12).map((record) => <ClassCard key={record.id} record={record} records={records} studios={studios} members={members} packages={packages} onEdit={startEdit} onDelete={removeRecord} />)}
+        {visibleRecords.length === 0 ? <EmptyState text="还没有课程记录，先记一节课吧～" /> : visibleRecords.slice(0, 12).map((record) => <ClassCard key={record.id} record={record} records={records} studios={studios} members={members} packages={packages} expanded={expandedIds.includes(record.id)} onToggle={() => setExpandedIds((current) => current.includes(record.id) ? current.filter((id) => id !== record.id) : [...current, record.id])} onEdit={startEdit} onDelete={removeRecord} />)}
       </section>
     </div>
   );
@@ -291,11 +293,12 @@ function PackageUsageHint({ usage, overuseWarning }: { usage: PackageUsage; over
   );
 }
 
-function ClassCard({ record, records, studios, members, packages, onEdit, onDelete }: { record: ClassRecord; records: ClassRecord[]; studios: Studio[]; members: Member[]; packages: MemberPackage[]; onEdit: (record: ClassRecord) => void; onDelete: (record: ClassRecord) => void }) {
+function ClassCard({ record, records, studios, members, packages, expanded, onToggle, onEdit, onDelete }: { record: ClassRecord; records: ClassRecord[]; studios: Studio[]; members: Member[]; packages: MemberPackage[]; expanded: boolean; onToggle: () => void; onEdit: (record: ClassRecord) => void; onDelete: (record: ClassRecord) => void }) {
   const missingPrivatePackage = record.course_type === "private" && !record.package_id;
   const memberPackage = packages.find((p) => p.id === record.package_id);
   const usage = memberPackage ? calculatePackageUsageFromClasses(memberPackage, records) : null;
-  return <article className="space-y-3 rounded-3xl border border-white/70 bg-card/90 p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div><div className="text-sm text-muted-foreground">{record.date}</div><h3 className="mt-1 font-medium">{record.course_name}</h3></div><Badge>{courseTypeLabels[record.course_type]}</Badge></div><div className="grid gap-1 text-sm text-muted-foreground"><span>{record.studio_id ? `归属：${studios.find((s) => s.id === record.studio_id)?.name ?? "瑜伽馆"}` : "未选择瑜伽馆"} · {record.hours} 课时</span>{record.member_id ? <span>会员：{members.find((m) => m.id === record.member_id)?.name ?? ""}</span> : null}{memberPackage ? <span>课包：{memberPackage.package_name}</span> : null}{usage ? <span>课包剩余：{getPackageUsageLabel(usage)}</span> : null}</div>{missingPrivatePackage ? <div className="flex gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-sm text-amber-800"><AlertCircle className="mt-0.5 size-4 shrink-0" />缺少课包，工资计算时可能需要补充。</div> : null}<div className="grid grid-cols-2 gap-2"><Button type="button" variant="secondary" size="sm" onClick={() => onEdit(record)}>编辑</Button><Button type="button" variant="outline" size="sm" onClick={() => onDelete(record)}>删除</Button></div></article>;
+  const summary = buildClassSummary({ record, members, packages, studios, courseTypeLabel: courseTypeLabels[record.course_type] });
+  return <article className="space-y-3 rounded-3xl border border-white/70 bg-card/90 p-4 shadow-sm"><button type="button" className="flex min-h-16 w-full items-start justify-between gap-3 text-left" onClick={onToggle}><div><div className="text-sm text-muted-foreground">{summary.title}</div>{summary.subtitle ? <h3 className="mt-1 font-medium">{summary.subtitle}</h3> : null}<p className="mt-1 text-sm text-primary">{summary.meta}</p></div><div className="flex items-center gap-2"><Badge>{courseTypeLabels[record.course_type]}</Badge>{expanded ? <ChevronUp className="size-5 text-muted-foreground" /> : <ChevronDown className="size-5 text-muted-foreground" />}</div></button>{missingPrivatePackage ? <div className="flex gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-sm text-amber-800"><AlertCircle className="mt-0.5 size-4 shrink-0" />缺少课包，工资计算时可能需要补充。</div> : null}{expanded ? <div className="space-y-3 border-t border-white/70 pt-3 text-sm text-muted-foreground"><div className="grid gap-1"><span>学员人数：{record.student_count}</span>{record.member_id ? <span>会员：{members.find((m) => m.id === record.member_id)?.name ?? ""}</span> : null}{memberPackage ? <span>课包：{memberPackage.package_name}</span> : null}{typeof record.manual_fee === "number" ? <span>手动课时费：¥{record.manual_fee.toFixed(2)}</span> : null}{usage ? <span>课包剩余：{getPackageUsageLabel(usage)}</span> : null}</div>{record.note ? <p className="rounded-2xl bg-muted/70 px-3 py-2">{record.note}</p> : null}<div className="grid grid-cols-2 gap-2"><Button type="button" variant="secondary" size="sm" onClick={() => onEdit(record)}>编辑</Button><Button type="button" variant="outline" size="sm" onClick={() => onDelete(record)}>删除</Button></div></div> : null}</article>;
 }
 
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {

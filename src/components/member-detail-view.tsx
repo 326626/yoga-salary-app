@@ -8,15 +8,37 @@ import { ArrowLeft, BookOpenCheck, CreditCard, ReceiptText, ShoppingBag } from "
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { calculatePackageUsageFromClasses, getMemberDetail, listClassesByMember, listPackages, listPerformancesByMember, listStudios, type PackageUsage } from "@/lib/data";
+import { Feedback } from "@/components/ui/feedback";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { calculatePackageUsageFromClasses, createMemberPackage, getMemberDetail, listClassesByMember, listPackages, listPerformancesByMember, listStudios, type PackageUsage } from "@/lib/data";
 import { mockClasses, mockMembers, mockPackages, mockPerformances, mockStudios } from "@/lib/mock-data";
 import { getPackageUsageLabel, getPackageUsageTone } from "@/lib/packages/usageDisplay";
 import { formatMoney } from "@/lib/salary/formatMoney";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { createMemberPackageInputSchema } from "@/lib/validation";
 import type { ClassRecord, Member, MemberPackage, Performance, Studio } from "@/types";
 
 const courseTypeLabels: Record<string, string> = { group: "团课", private: "私教", trial: "体验课", substitute: "代课", other: "其他" };
 const performanceTypeLabels: Record<string, string> = { new_card: "新办卡", renewal: "续费", private_package: "私教包", product: "商品", other: "其他" };
+const todayString = () => new Date().toISOString().slice(0, 10);
+const tabs = ["课包记录", "私教课记录", "业绩记录"] as const;
+type MemberDetailTab = (typeof tabs)[number];
+type MemberPackageMiniFormState = {
+  member_id: string;
+  teacher_id: string;
+  studio_id: string;
+  pricing_mode: string;
+  package_name: string;
+  course_type: string;
+  total_amount: string;
+  unit_price: string;
+  total_sessions: string;
+  purchase_date: string;
+  note: string;
+};
 
 export function MemberDetailView({ memberId }: { memberId: string }) {
   const [user, setUser] = useState<User | null>(null);
@@ -26,6 +48,21 @@ export function MemberDetailView({ memberId }: { memberId: string }) {
   const [classes, setClasses] = useState<ClassRecord[]>(mockClasses.filter((item) => item.member_id === memberId));
   const [performances, setPerformances] = useState<Performance[]>(mockPerformances.filter((item) => item.member_id === memberId));
   const [message, setMessage] = useState("");
+  const [activeTab, setActiveTab] = useState<MemberDetailTab>("课包记录");
+  const [isPackageFormOpen, setIsPackageFormOpen] = useState(false);
+  const [packageForm, setPackageForm] = useState<MemberPackageMiniFormState>({
+    member_id: memberId,
+    teacher_id: "",
+    studio_id: "",
+    pricing_mode: "total_amount",
+    package_name: "",
+    course_type: "private",
+    total_amount: "",
+    unit_price: "",
+    total_sessions: "",
+    purchase_date: todayString(),
+    note: ""
+  });
 
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
@@ -49,8 +86,52 @@ export function MemberDetailView({ memberId }: { memberId: string }) {
       setClasses(realClasses);
       setPerformances(realPerformances);
       setStudios(realStudios);
+      setPackageForm((current) => ({ ...current, member_id: memberId, studio_id: realMember?.studio_id ?? "" }));
     }).catch(() => setMessage("网络好像开小差了，请再试一次～"));
   }, [memberId]);
+
+  function updatePackageField(name: keyof typeof packageForm, value: string) {
+    setPackageForm((current) => ({ ...current, [name]: value }));
+  }
+
+  function resetPackageForm(studioId = member?.studio_id ?? "") {
+    setPackageForm({
+      member_id: memberId,
+      teacher_id: "",
+      studio_id: studioId,
+      pricing_mode: "total_amount",
+      package_name: "",
+      course_type: "private",
+      total_amount: "",
+      unit_price: "",
+      total_sessions: "",
+      purchase_date: todayString(),
+      note: ""
+    });
+    setIsPackageFormOpen(false);
+  }
+
+  async function handleCreatePackage(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const result = createMemberPackageInputSchema.safeParse(packageForm);
+    if (!result.success) {
+      setMessage("请把课包信息填写完整～");
+      return;
+    }
+    if (!user || !isSupabaseConfigured()) {
+      setMessage("登录后可以保存课包～");
+      return;
+    }
+    try {
+      const supabase = createBrowserSupabaseClient();
+      const created = await createMemberPackage(supabase, user.id, result.data);
+      setPackages((current) => [created, ...current]);
+      setMessage("课包已添加～");
+      resetPackageForm(created.studio_id ?? member?.studio_id ?? "");
+    } catch {
+      setMessage("保存失败，请稍后再试～");
+    }
+  }
 
   if (!member) {
     return (
@@ -85,19 +166,36 @@ export function MemberDetailView({ memberId }: { memberId: string }) {
           {!member.studio_id ? <p className="rounded-3xl bg-amber-50 p-3 text-sm text-amber-800">补充所属瑜伽馆后，工资和课包会更清楚～</p> : null}
           {member.note ? <p className="rounded-3xl bg-card/70 p-3 text-sm text-muted-foreground">{member.note}</p> : null}
           {message ? <p className="rounded-3xl bg-card/70 p-3 text-sm text-muted-foreground">{message}</p> : null}
-          <div className="grid grid-cols-3 gap-2">
-            <Button asChild size="sm"><Link href={`/packages?memberId=${member.id}&studioId=${member.studio_id ?? ""}`}>添加课包</Link></Button>
-            <Button asChild size="sm" variant="secondary"><Link href={`/classes?memberId=${member.id}&studioId=${member.studio_id ?? ""}&courseType=private`}>记录私教课</Link></Button>
-            <Button asChild size="sm" variant="outline"><Link href={`/performances?memberId=${member.id}&studioId=${member.studio_id ?? ""}`}>记录业绩</Link></Button>
-          </div>
         </CardContent>
       </Card>
 
-      <SectionTitle icon={ShoppingBag} title="她的课包" />
-      {packages.length === 0 ? <Empty text="还没有课包，可以先给她添加一个～" /> : packages.map((item) => <PackageRow key={item.id} item={item} usage={calculatePackageUsageFromClasses(item, classes)} />)}
+      <div className="grid grid-cols-3 rounded-2xl bg-muted p-1">
+        {tabs.map((tab) => (
+          <button key={tab} type="button" className={activeTab === tab ? "min-h-11 rounded-xl bg-card text-sm font-medium text-primary shadow-sm" : "min-h-11 rounded-xl text-sm font-medium text-muted-foreground"} onClick={() => setActiveTab(tab)}>
+            {tab}
+          </button>
+        ))}
+      </div>
+      <Feedback message={message.includes("体验数据") ? "" : message} tone={message.includes("失败") ? "error" : "success"} />
 
-      <SectionTitle icon={BookOpenCheck} title="最近课程" />
-      {classes.length === 0 ? <Empty text="还没有课程记录。" /> : classes.slice(0, 6).map((item) => (
+      {activeTab === "课包记录" ? (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <SectionTitle icon={ShoppingBag} title="课包记录" />
+            {!isPackageFormOpen ? <Button size="sm" onClick={() => setIsPackageFormOpen(true)}>新增课包</Button> : null}
+          </div>
+          {isPackageFormOpen ? <MemberPackageMiniForm form={packageForm} onChange={updatePackageField} onCancel={() => resetPackageForm()} onSubmit={handleCreatePackage} /> : null}
+          {packages.length === 0 ? <Empty text="还没有课包，可以先给她添加一个～" /> : packages.map((item) => <PackageRow key={item.id} item={item} usage={calculatePackageUsageFromClasses(item, classes)} />)}
+        </section>
+      ) : null}
+
+      {activeTab === "私教课记录" ? (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <SectionTitle icon={BookOpenCheck} title="私教课记录" />
+            <Button asChild size="sm"><Link href={`/classes?memberId=${member.id}&studioId=${member.studio_id ?? ""}&courseType=private`}>新增私教课</Link></Button>
+          </div>
+          {classes.length === 0 ? <Empty text="还没有私教课记录。" /> : classes.filter((item) => item.course_type === "private").slice(0, 8).map((item) => (
         <article key={item.id} className="rounded-3xl border border-white/70 bg-card/90 p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div><p className="text-sm text-muted-foreground">{item.date}</p><h3 className="mt-1 font-medium">{item.course_name}</h3></div>
@@ -105,10 +203,17 @@ export function MemberDetailView({ memberId }: { memberId: string }) {
           </div>
           <p className="mt-3 text-sm text-muted-foreground">{item.hours} 课时 · {item.student_count} 人</p>
         </article>
-      ))}
+          ))}
+        </section>
+      ) : null}
 
-      <SectionTitle icon={ReceiptText} title="相关业绩" />
-      {performances.length === 0 ? <Empty text="还没有相关业绩记录。" /> : performances.slice(0, 6).map((item) => (
+      {activeTab === "业绩记录" ? (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <SectionTitle icon={ReceiptText} title="业绩记录" />
+            <Button asChild size="sm"><Link href={`/performances?memberId=${member.id}&studioId=${member.studio_id ?? ""}`}>新增业绩</Link></Button>
+          </div>
+          {performances.length === 0 ? <Empty text="还没有相关业绩记录。" /> : performances.slice(0, 8).map((item) => (
         <article key={item.id} className="rounded-3xl border border-white/70 bg-card/90 p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div><p className="text-sm text-muted-foreground">{item.date}</p><h3 className="mt-1 font-medium">{performanceTypeLabels[item.type]}</h3></div>
@@ -116,8 +221,36 @@ export function MemberDetailView({ memberId }: { memberId: string }) {
           </div>
           {!item.commissionable ? <p className="mt-3 rounded-2xl bg-secondary/70 px-3 py-2 text-sm text-muted-foreground">不计提成</p> : null}
         </article>
-      ))}
+          ))}
+        </section>
+      ) : null}
     </div>
+  );
+}
+
+function MemberPackageMiniForm({ form, onChange, onCancel, onSubmit }: { form: MemberPackageMiniFormState; onChange: (name: keyof MemberPackageMiniFormState, value: string) => void; onCancel: () => void; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void }) {
+  const totalSessions = Number(form.total_sessions);
+  const totalAmount = form.pricing_mode === "unit_price" ? Number(form.unit_price || 0) * (Number.isFinite(totalSessions) ? totalSessions : 0) : Number(form.total_amount || 0);
+  const unitPrice = form.pricing_mode === "unit_price" ? Number(form.unit_price || 0) : totalSessions > 0 ? totalAmount / totalSessions : 0;
+
+  return (
+    <Card>
+      <CardHeader className="p-4"><CardTitle className="text-lg">新增课包</CardTitle></CardHeader>
+      <CardContent className="p-4 pt-0">
+        <form className="space-y-4" onSubmit={onSubmit}>
+          <Field label="课包名称"><Input value={form.package_name} placeholder="例如：私教 10 节" onChange={(event) => onChange("package_name", event.target.value)} /></Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="录入方式"><Select value={form.pricing_mode} onChange={(event) => onChange("pricing_mode", event.target.value)}><option value="total_amount">按总价计算</option><option value="unit_price">按客单价计算</option></Select></Field>
+            <Field label="总课时"><Input type="number" inputMode="decimal" value={form.total_sessions} onChange={(event) => onChange("total_sessions", event.target.value)} /></Field>
+          </div>
+          {form.pricing_mode === "unit_price" ? <Field label="客单价 / 单节成交价"><Input type="number" inputMode="decimal" value={form.unit_price} onChange={(event) => onChange("unit_price", event.target.value)} /></Field> : <Field label="总成交金额"><Input type="number" inputMode="decimal" value={form.total_amount} onChange={(event) => onChange("total_amount", event.target.value)} /></Field>}
+          <div className="rounded-3xl bg-accent px-4 py-3 text-sm text-primary">总成交金额：¥{formatMoney(Number.isFinite(totalAmount) ? totalAmount : 0)} · 单节：¥{formatMoney(Number.isFinite(unitPrice) ? unitPrice : 0)}</div>
+          <Field label="购买日期"><Input type="date" value={form.purchase_date} onChange={(event) => onChange("purchase_date", event.target.value)} /></Field>
+          <Field label="备注（可选）"><Textarea value={form.note} onChange={(event) => onChange("note", event.target.value)} /></Field>
+          <div className="grid grid-cols-2 gap-3"><Button type="button" variant="secondary" onClick={onCancel}>取消</Button><Button type="submit">保存课包</Button></div>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -167,6 +300,10 @@ function SectionTitle({ icon: Icon, title }: { icon: typeof ShoppingBag; title: 
 
 function Pill({ label, value }: { label: string; value: string }) {
   return <div className="rounded-2xl bg-secondary p-3"><div className="text-xs text-muted-foreground">{label}</div><div className="font-semibold">{value}</div></div>;
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div className="space-y-2"><Label>{label}</Label>{children}</div>;
 }
 
 function Empty({ text }: { text: string }) {
