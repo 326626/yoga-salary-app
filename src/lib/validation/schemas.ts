@@ -49,6 +49,7 @@ export const studioSchema = z.object({
 export const memberSchema = z.object({
   id: idSchema,
   user_id: idSchema,
+  studio_id: idSchema.nullable(),
   name: z.string().trim().min(1),
   phone: nullableTextSchema,
   note: nullableTextSchema,
@@ -280,6 +281,7 @@ export const createStudioInputSchema = z.object({
 export const updateStudioInputSchema = createStudioInputSchema;
 
 export const createMemberInputSchema = z.object({
+  studio_id: idSchema,
   name: z.string().trim().min(1, "请填写姓名"),
   phone: z.string().optional(),
   note: z.string().optional()
@@ -290,13 +292,23 @@ export const updateMemberInputSchema = createMemberInputSchema;
 export const createMemberPackageInputSchema = z.object({
   member_id: idSchema,
   teacher_id: optionalIdSchema,
-  studio_id: optionalIdSchema,
+  studio_id: idSchema,
+  pricing_mode: z.enum(["total_amount", "unit_price"]).optional(),
   package_name: z.string().trim().min(1, "请输入课包名称"),
   course_type: courseTypeSchema,
-  total_amount: nonnegativeNumberFromFormSchema,
+  total_amount: optionalNumberFromFormSchema,
+  unit_price: optionalNumberFromFormSchema,
   total_sessions: positiveNumberFromFormSchema,
   purchase_date: dateSchema,
   note: z.string().optional()
+}).superRefine((value, context) => {
+  if ((value.pricing_mode ?? "total_amount") === "unit_price") {
+    if (typeof value.unit_price !== "number") {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["unit_price"], message: "请输入客单价 / 单节成交价" });
+    }
+  } else if (typeof value.total_amount !== "number") {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["total_amount"], message: "请输入总成交金额" });
+  }
 });
 
 export const updateMemberPackageInputSchema = createMemberPackageInputSchema;

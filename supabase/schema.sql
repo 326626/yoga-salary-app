@@ -23,6 +23,7 @@ create table if not exists public.studios (
 create table if not exists public.members (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,
+  studio_id uuid references public.studios(id),
   name text not null,
   phone text,
   note text,

@@ -8,7 +8,7 @@ const navItems = [
   { href: "/performances", label: "业绩" },
   { href: "/salary-calculator", label: "工资" },
   { href: "/mine", label: "我的" },
-  { href: "/teachers", label: "老师" },
+  { href: "/studios", label: "瑜伽馆" },
   { href: "/members", label: "会员" },
   { href: "/packages", label: "课包" },
   { href: "/salary-rules", label: "工资规则" }

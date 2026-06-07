@@ -8,6 +8,7 @@ const baseForm = {
   member_id: "",
   package_id: "",
   teacher_id: "",
+  studio_id: "",
   course_type: "group",
   course_name: ""
 };
@@ -26,6 +27,7 @@ describe("class prefill helpers", () => {
 
     expect(result.member_id).toBe(mockPackages[0].member_id);
     expect(result.package_id).toBe(mockPackages[0].id);
+    expect(result.studio_id).toBe(mockPackages[0].studio_id);
     expect(result.course_type).toBe("private");
     expect(result.course_name).toBe("私教课");
   });
@@ -42,7 +44,7 @@ describe("class prefill helpers", () => {
     expect(result).not.toHaveProperty("user_id");
   });
 
-  it("derives member and teacher from selected package", () => {
+  it("derives member studio and teacher from selected package", () => {
     const result = derivePackageSelection({
       packageId: mockPackages[0].id,
       packages: mockPackages,
@@ -51,6 +53,7 @@ describe("class prefill helpers", () => {
     });
 
     expect(result.member_id).toBe(mockPackages[0].member_id);
+    expect(result.studio_id).toBe(mockPackages[0].studio_id);
     expect(result.teacher_id).toBe(mockPackages[0].teacher_id);
   });
 

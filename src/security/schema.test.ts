@@ -28,7 +28,7 @@ describe("Supabase schema integrity", () => {
   });
 
   it("includes studio ownership fields on related tables", () => {
-    for (const table of ["packages", "classes", "performances", "salary_rules", "salary_calculations"]) {
+    for (const table of ["members", "packages", "classes", "performances", "salary_rules", "salary_calculations"]) {
       expect(schema).toMatch(new RegExp(`create table if not exists public\\.${table} \\([\\s\\S]*?studio_id uuid references public\\.studios\\(id\\)`));
     }
   });

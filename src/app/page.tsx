@@ -1,4 +1,4 @@
-import { BookOpenCheck, Dumbbell, ReceiptText, Settings2, UserRound, WalletCards } from "lucide-react";
+import { BookOpenCheck, Building2, Dumbbell, ReceiptText, Settings2, UserRound, WalletCards } from "lucide-react";
 import Link from "next/link";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +15,7 @@ const commonActions = [
   { href: "/members", label: "会员", icon: UserRound },
   { href: "/packages", label: "课包", icon: Dumbbell },
   { href: "/salary-rules", label: "工资规则", icon: Settings2 },
-  { href: "/teachers", label: "老师", icon: BookOpenCheck }
+  { href: "/studios", label: "瑜伽馆", icon: Building2 }
 ];
 
 export default function HomePage() {

@@ -103,7 +103,7 @@ export function SalaryCalculatorView({ initialStudioId }: { initialStudioId?: st
       setTeacherId(nextTeacherId);
       const selectedRule = selectSalaryRule(realSalaryRules, effectiveStudioId);
       if (realTeachers.length === 0) {
-        setMessage("还没有老师档案，先创建一个吧～");
+        setMessage("还没有我的兼容档案，先去我的页面创建一下吧～");
       } else if (!selectedRule.rule) {
         setMessage(selectedRule.message ?? "还没有启用工资规则，先去工资规则页面设置一下～");
       } else {
@@ -153,7 +153,7 @@ export function SalaryCalculatorView({ initialStudioId }: { initialStudioId?: st
       return;
     }
     if (!result.teacherId) {
-      setMessage("还没有老师档案，先创建一个吧～");
+      setMessage("还没有我的兼容档案，先去我的页面创建一下吧～");
       return;
     }
 
@@ -183,8 +183,6 @@ export function SalaryCalculatorView({ initialStudioId }: { initialStudioId?: st
       setSaving(false);
     }
   }
-
-  const currentTeacherName = useMemo(() => teachers.find((teacher) => teacher.id === result.teacherId)?.name ?? "体验老师", [teachers, result.teacherId]);
 
   const composition = [
     { label: "课时费", value: result.classFeeTotal, icon: NotebookText },
@@ -221,7 +219,7 @@ export function SalaryCalculatorView({ initialStudioId }: { initialStudioId?: st
             <div>
               <p className="text-sm text-muted-foreground">预计工资</p>
               <div className="mt-2 text-4xl font-semibold text-primary">¥{formatMoney(result.salaryTotal)}</div>
-              <p className="mt-2 text-sm text-muted-foreground">{month} · {currentTeacherName}</p>
+              <p className="mt-2 text-sm text-muted-foreground">{month} · {studioId ? studios.find((studio) => studio.id === studioId)?.name ?? "指定瑜伽馆" : "全部瑜伽馆"}</p>
             </div>
             <span className="flex size-11 items-center justify-center rounded-2xl bg-card/80 text-primary shadow-sm">
               <Wallet className="size-5" aria-hidden="true" />
@@ -238,19 +236,10 @@ export function SalaryCalculatorView({ initialStudioId }: { initialStudioId?: st
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 p-4 pt-0">
-          {message ? <div className="rounded-3xl bg-secondary/70 p-4 text-sm text-muted-foreground">{message} {message.includes("工资规则") ? <Link href="/salary-rules" className="font-medium text-primary">去设置</Link> : message.includes("老师") ? <Link href="/teachers" className="font-medium text-primary">去创建</Link> : <Link href="/login" className="font-medium text-primary">去登录</Link>}</div> : null}
+          {message ? <div className="rounded-3xl bg-secondary/70 p-4 text-sm text-muted-foreground">{message} {message.includes("工资规则") ? <Link href="/salary-rules" className="font-medium text-primary">去设置</Link> : message.includes("兼容档案") ? <Link href="/mine" className="font-medium text-primary">去创建</Link> : <Link href="/login" className="font-medium text-primary">去登录</Link>}</div> : null}
           {unassignedNotice ? <div className="rounded-3xl bg-amber-50 p-4 text-sm text-amber-800">{unassignedNotice} <Link href="/organize" className="font-medium text-primary">去整理归属</Link></div> : null}
           {studioId && result.breakdown.classFees.length === 0 && result.performanceTotal === 0 ? <div className="rounded-3xl bg-secondary/70 p-4 text-sm text-muted-foreground">这个瑜伽馆本月还没有记录～</div> : null}
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="老师">
-              <Select value={teacherId} onChange={(event) => setTeacherId(event.target.value)}>
-                {teachers.map((teacher) => (
-                  <option key={teacher.id} value={teacher.id}>
-                    {teacher.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+          <div className="grid grid-cols-1 gap-3">
             <Field label="月份">
               <Input type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
             </Field>

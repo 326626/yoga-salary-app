@@ -28,6 +28,7 @@ export function StudiosManager() {
   const [studios, setStudios] = useState<Studio[]>(mockStudios);
   const [form, setForm] = useState<StudioForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [feedback, setFeedback] = useState("");
   const [tone, setTone] = useState<"success" | "warning" | "error">("success");
@@ -53,6 +54,7 @@ export function StudiosManager() {
 
   function startEdit(studio: Studio) {
     setEditingId(studio.id);
+    setIsFormOpen(true);
     setForm({
       name: studio.name,
       contact_name: studio.contact_name ?? "",
@@ -65,6 +67,7 @@ export function StudiosManager() {
 
   function resetForm() {
     setEditingId(null);
+    setIsFormOpen(false);
     setForm(emptyForm);
     setErrors({});
   }
@@ -105,6 +108,7 @@ export function StudiosManager() {
 
   async function createFirstStudio() {
     setForm({ ...emptyForm, name: "我的常去瑜伽馆" });
+    setIsFormOpen(true);
   }
 
   async function removeStudio(studio: Studio) {
@@ -137,6 +141,9 @@ export function StudiosManager() {
         <p className="text-sm text-muted-foreground">工作地点</p>
         <h1 className="text-2xl font-semibold tracking-normal">瑜伽馆 / 工作地点</h1>
         <p className="text-sm leading-6 text-muted-foreground">记录你常去上课的瑜伽馆、工作室或私教场地，工资之后可以按地点区分。</p>
+        <Button className="w-full" onClick={() => { setIsFormOpen(true); setEditingId(null); setForm(emptyForm); }}>
+          新增瑜伽馆
+        </Button>
       </header>
       <Feedback message={feedback} tone={tone} />
       {!user ? (
@@ -146,7 +153,7 @@ export function StudiosManager() {
         <Card><CardContent className="space-y-3 p-4"><p className="text-sm text-muted-foreground">还没有添加瑜伽馆，先记录你常去上课的地方吧～</p><Button className="w-full" onClick={createFirstStudio}>添加我的第一个瑜伽馆</Button></CardContent></Card>
       ) : null}
 
-      <Card>
+      {isFormOpen ? <Card>
         <CardHeader className="p-4"><CardTitle className="flex items-center gap-2 text-lg"><Plus className="size-5 text-primary" />{editingId ? "编辑地点" : "新增地点"}</CardTitle></CardHeader>
         <CardContent className="p-4 pt-0">
           <form className="space-y-4" onSubmit={handleSubmit}>
@@ -161,11 +168,11 @@ export function StudiosManager() {
             </div>
           </form>
         </CardContent>
-      </Card>
+      </Card> : null}
 
       <section className="space-y-3">
         <h2 className="text-base font-semibold">地点列表</h2>
-        {studios.length === 0 ? <EmptyState text="还没有添加瑜伽馆，先记录你常去上课的地方吧～" /> : studios.map((studio) => <StudioCard key={studio.id} studio={studio} onEdit={startEdit} onDelete={removeStudio} />)}
+        {studios.length === 0 ? <EmptyState text="先添加一个常去的瑜伽馆吧～" /> : studios.map((studio) => <StudioCard key={studio.id} studio={studio} onEdit={startEdit} onDelete={removeStudio} />)}
       </section>
     </div>
   );

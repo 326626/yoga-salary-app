@@ -14,16 +14,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { calculatePackageUsageFromClasses, calculateUnitPrice, countPackageRelations, createMemberPackage, deleteMemberPackage, listClasses, listMembers, listPackages, listStudios, listTeachers, updateMemberPackage, type PackageUsage } from "@/lib/data";
-import { mockClasses, mockMembers, mockPackages, mockStudios, mockTeachers } from "@/lib/mock-data";
+import { calculatePackageUsageFromClasses, calculateTotalAmount, calculateUnitPrice, countPackageRelations, createMemberPackage, deleteMemberPackage, listClasses, listMembers, listPackages, listStudios, updateMemberPackage, type PackageUsage } from "@/lib/data";
+import { mockClasses, mockMembers, mockPackages, mockStudios } from "@/lib/mock-data";
 import { getPackageUsageLabel, getPackageUsageTone } from "@/lib/packages/usageDisplay";
 import { getPackageDeletePrompt } from "@/lib/relationPrompts";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { createMemberPackageInputSchema } from "@/lib/validation";
-import type { ClassRecord, CourseType, Member, MemberPackage, Studio, Teacher } from "@/types";
+import type { ClassRecord, CourseType, Member, MemberPackage, Studio } from "@/types";
 
 type PackageForm = Omit<z.input<typeof createMemberPackageInputSchema>, "total_amount" | "total_sessions"> & {
   total_amount: string;
+  unit_price: string;
   total_sessions: string;
 };
 type FieldErrors = Partial<Record<keyof PackageForm, string>>;
@@ -40,9 +41,11 @@ const initialForm = (): PackageForm => ({
   member_id: mockMembers[0]?.id ?? "",
   teacher_id: "",
   studio_id: mockStudios[0]?.id ?? "",
+  pricing_mode: "total_amount",
   package_name: "",
   course_type: "private",
   total_amount: "",
+  unit_price: "",
   total_sessions: "",
   purchase_date: todayString(),
   note: ""
@@ -51,7 +54,6 @@ const initialForm = (): PackageForm => ({
 export function PackagesManager({ initialMemberId, initialEditId, initialStudioId }: { initialMemberId?: string; initialEditId?: string; initialStudioId?: string }) {
   const [user, setUser] = useState<User | null>(null);
   const [members, setMembers] = useState<Member[]>(mockMembers);
-  const [teachers, setTeachers] = useState<Teacher[]>(mockTeachers);
   const [studios, setStudios] = useState<Studio[]>(mockStudios);
   const [packages, setPackages] = useState<MemberPackage[]>(mockPackages);
   const [classes, setClasses] = useState<ClassRecord[]>(mockClasses);
@@ -68,21 +70,20 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
       const currentUser = data.session?.user ?? null;
       setUser(currentUser);
       if (!currentUser) return;
-      const [realMembers, realTeachers, realStudios, realPackages, realClasses] = await Promise.all([
+      const [realMembers, realStudios, realPackages, realClasses] = await Promise.all([
         listMembers(supabase, currentUser.id),
-        listTeachers(supabase, currentUser.id),
         listStudios(supabase, currentUser.id),
         listPackages(supabase, currentUser.id),
         listClasses(supabase, currentUser.id)
       ]);
       setMembers(realMembers);
-      setTeachers(realTeachers);
       setStudios(realStudios);
       setPackages(realPackages);
       setClasses(realClasses);
       const preferredMemberId = realMembers.some((member) => member.id === initialMemberId) ? initialMemberId : realMembers[0]?.id;
       const preferredStudioId = realStudios.some((studio) => studio.id === initialStudioId) ? initialStudioId : realStudios[0]?.id;
-      setForm((current) => ({ ...current, member_id: preferredMemberId ?? "", studio_id: preferredStudioId ?? "" }));
+      const memberStudioId = realMembers.find((member) => member.id === preferredMemberId)?.studio_id;
+      setForm((current) => ({ ...current, member_id: preferredMemberId ?? "", studio_id: memberStudioId ?? preferredStudioId ?? "" }));
     }).catch(() => {
       setTone("error");
       setFeedback("网络好像开小差了，请再试一次～");
@@ -106,18 +107,39 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
   }, [editingId, initialEditId, packages]);
 
   const unitPricePreview = useMemo(() => {
+    const mode = form.pricing_mode ?? "total_amount";
     const totalAmount = Number(form.total_amount);
+    const unitPrice = Number(form.unit_price);
     const totalSessions = Number(form.total_sessions);
-    if (!Number.isFinite(totalAmount) || !Number.isFinite(totalSessions) || totalSessions <= 0) return 0;
+    if (!Number.isFinite(totalSessions) || totalSessions <= 0) return 0;
+    if (mode === "unit_price") return Number.isFinite(unitPrice) ? unitPrice : 0;
+    if (!Number.isFinite(totalAmount)) return 0;
     return calculateUnitPrice(totalAmount, totalSessions);
-  }, [form.total_amount, form.total_sessions]);
+  }, [form.pricing_mode, form.total_amount, form.total_sessions, form.unit_price]);
+  const totalAmountPreview = useMemo(() => {
+    const totalSessions = Number(form.total_sessions);
+    if ((form.pricing_mode ?? "total_amount") === "unit_price") {
+      const unitPrice = Number(form.unit_price);
+      if (!Number.isFinite(unitPrice) || !Number.isFinite(totalSessions) || totalSessions <= 0) return 0;
+      return calculateTotalAmount(unitPrice, totalSessions);
+    }
+    const totalAmount = Number(form.total_amount);
+    return Number.isFinite(totalAmount) ? totalAmount : 0;
+  }, [form.pricing_mode, form.total_amount, form.total_sessions, form.unit_price]);
   const usages = useMemo(
     () => Object.fromEntries(packages.map((item) => [item.id, calculatePackageUsageFromClasses(item, classes)])),
     [classes, packages]
   );
 
   function updateField(name: keyof PackageForm, value: string) {
-    setForm((current) => ({ ...current, [name]: value }));
+    setForm((current) => {
+      const next = { ...current, [name]: value };
+      if (name === "member_id") {
+        const member = members.find((item) => item.id === value);
+        if (member?.studio_id) next.studio_id = member.studio_id;
+      }
+      return next;
+    });
     setErrors((current) => ({ ...current, [name]: undefined }));
   }
 
@@ -127,9 +149,11 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
       member_id: item.member_id,
       teacher_id: item.teacher_id ?? "",
       studio_id: item.studio_id ?? "",
+      pricing_mode: "total_amount",
       package_name: item.package_name,
       course_type: item.course_type,
       total_amount: String(item.total_amount),
+      unit_price: String(item.unit_price),
       total_sessions: String(item.total_sessions),
       purchase_date: item.purchase_date,
       note: item.note ?? ""
@@ -139,7 +163,7 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
 
   function resetForm() {
     setEditingId(null);
-    setForm({ ...initialForm(), member_id: members[0]?.id ?? "" });
+    setForm({ ...initialForm(), member_id: members[0]?.id ?? "", studio_id: members[0]?.studio_id ?? studios[0]?.id ?? "" });
     setErrors({});
   }
 
@@ -268,27 +292,29 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
                   ))}
                 </Select>
               </Field>
-              <Field label="关联老师（可选）" error={errors.teacher_id}>
-                <Select value={form.teacher_id ?? ""} onChange={(event) => updateField("teacher_id", event.target.value)}>
-                  <option value="">不选择</option>
-                  {teachers.map((teacher) => (
-                    <option key={teacher.id} value={teacher.id}>
-                      {teacher.name}
-                    </option>
-                  ))}
+              <Field label="录入方式">
+                <Select value={form.pricing_mode ?? "total_amount"} onChange={(event) => updateField("pricing_mode", event.target.value)}>
+                  <option value="total_amount">按总价计算</option>
+                  <option value="unit_price">按客单价计算</option>
                 </Select>
               </Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="成交价" error={errors.total_amount}>
-                <Input type="number" min="0" inputMode="decimal" value={form.total_amount} placeholder="3000" onChange={(event) => updateField("total_amount", event.target.value)} />
-              </Field>
+              {(form.pricing_mode ?? "total_amount") === "unit_price" ? (
+                <Field label="客单价 / 单节成交价" error={errors.unit_price}>
+                  <Input type="number" min="0" inputMode="decimal" value={form.unit_price} placeholder="300" onChange={(event) => updateField("unit_price", event.target.value)} />
+                </Field>
+              ) : (
+                <Field label="总成交金额" error={errors.total_amount}>
+                  <Input type="number" min="0" inputMode="decimal" value={form.total_amount} placeholder="3000" onChange={(event) => updateField("total_amount", event.target.value)} />
+                </Field>
+              )}
               <Field label="总课时" error={errors.total_sessions}>
                 <Input type="number" min="0" inputMode="numeric" value={form.total_sessions} placeholder="10" onChange={(event) => updateField("total_sessions", event.target.value)} />
               </Field>
             </div>
             <div className="rounded-3xl bg-accent px-4 py-3 text-sm text-primary">
-              单节成交价预览：<span className="font-semibold">¥{unitPricePreview.toFixed(2)}</span>
+              总成交金额：<span className="font-semibold">¥{totalAmountPreview.toFixed(2)}</span> · 单节成交价：<span className="font-semibold">¥{unitPricePreview.toFixed(2)}</span>
             </div>
             <Field label="购买日期" error={errors.purchase_date}>
               <Input type="date" value={form.purchase_date} onChange={(event) => updateField("purchase_date", event.target.value)} />
@@ -315,7 +341,7 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
         {packages.length === 0 ? (
           <EmptyState text="还没有课包，私教课建议先添加课包～" />
         ) : (
-            packages.map((item) => <PackageCard key={item.id} item={item} members={members} teachers={teachers} studios={studios} usage={usages[item.id]} onEdit={startEdit} onDelete={removePackage} />)
+            packages.map((item) => <PackageCard key={item.id} item={item} members={members} studios={studios} usage={usages[item.id]} onEdit={startEdit} onDelete={removePackage} />)
         )}
       </section>
     </div>
@@ -325,7 +351,6 @@ export function PackagesManager({ initialMemberId, initialEditId, initialStudioI
 function PackageCard({
   item,
   members,
-  teachers,
   studios,
   usage,
   onEdit,
@@ -333,14 +358,12 @@ function PackageCard({
 }: {
   item: MemberPackage;
   members: Member[];
-  teachers: Teacher[];
   studios: Studio[];
   usage?: PackageUsage;
   onEdit: (item: MemberPackage) => void;
   onDelete: (item: MemberPackage) => void;
 }) {
   const memberName = members.find((member) => member.id === item.member_id)?.name ?? "会员";
-  const teacherName = teachers.find((teacher) => teacher.id === item.teacher_id)?.name;
   const studioName = studios.find((studio) => studio.id === item.studio_id)?.name;
 
   return (
@@ -363,19 +386,18 @@ function PackageCard({
       </div>
       <div className="flex flex-wrap gap-2">
         <Badge>{courseTypeLabels[item.course_type]}</Badge>
-        {teacherName ? <Badge>{teacherName}</Badge> : null}
         {studioName ? <Badge>{studioName}</Badge> : null}
         <Badge>{item.purchase_date}</Badge>
       </div>
       <div className="grid grid-cols-3 gap-2 text-sm">
-        <AmountPill label="成交价" value={`¥${item.total_amount.toFixed(2)}`} />
+        <AmountPill label="总成交金额" value={`¥${item.total_amount.toFixed(2)}`} />
         <AmountPill label="课时" value={`${item.total_sessions}`} />
-        <AmountPill label="单节" value={`¥${item.unit_price.toFixed(2)}`} strong />
+        <AmountPill label="客单价" value={`¥${item.unit_price.toFixed(2)}`} strong />
       </div>
       {usage ? <UsageStrip usage={usage} /> : null}
       {item.course_type === "private" ? <p className="rounded-2xl bg-secondary/70 px-3 py-2 text-sm text-muted-foreground">私教工资会优先使用这个单节成交价。</p> : null}
       <Button asChild variant="secondary" className="w-full">
-        <Link href={`/classes?memberId=${item.member_id}&packageId=${item.id}&teacherId=${item.teacher_id ?? ""}&courseType=private`}>用这个课包记一节课</Link>
+        <Link href={`/classes?memberId=${item.member_id}&packageId=${item.id}&studioId=${item.studio_id ?? ""}&courseType=private`}>用这个课包记一节课</Link>
       </Button>
       {item.note ? <p className="text-sm text-muted-foreground">{item.note}</p> : null}
     </article>
@@ -425,9 +447,11 @@ function EmptyState({ text }: { text: string }) {
 function friendlyError(field: keyof FieldErrors, fallback: string) {
   const messages: FieldErrors = {
     member_id: "请选择会员",
+    studio_id: "请选择瑜伽馆",
     package_name: "请输入课包名称",
     course_type: "请选择课程类型",
     total_amount: "成交价不能小于 0",
+    unit_price: "请输入客单价 / 单节成交价",
     total_sessions: "总课时需要大于 0",
     purchase_date: "请选择购买日期"
   };

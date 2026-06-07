@@ -58,6 +58,7 @@ export const mockMembers: Member[] = [
   {
     id: "33333333-3333-4333-8333-333333333301",
     user_id: mockUserId,
+    studio_id: mockStudios[0].id,
     name: "李女士",
     phone: "13900000001",
     note: "300 元/节私教课包",
@@ -66,6 +67,7 @@ export const mockMembers: Member[] = [
   {
     id: "33333333-3333-4333-8333-333333333302",
     user_id: mockUserId,
+    studio_id: mockStudios[0].id,
     name: "陈先生",
     phone: "13900000002",
     note: "500 元/节私教课包",
@@ -74,6 +76,7 @@ export const mockMembers: Member[] = [
   {
     id: "33333333-3333-4333-8333-333333333303",
     user_id: mockUserId,
+    studio_id: mockStudios[0].id,
     name: "赵女士",
     phone: "13900000003",
     note: "团课月卡会员",

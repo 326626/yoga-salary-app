@@ -8,13 +8,13 @@ import { ArrowLeft, BookOpenCheck, CreditCard, PenLine, Trash2 } from "lucide-re
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { calculatePackageUsageFromClasses, countPackageRelations, deleteMemberPackage, getPackageDetail, listClassesByPackage, listMembers, listTeachers, type PackageUsage } from "@/lib/data";
-import { mockClasses, mockMembers, mockPackages, mockTeachers } from "@/lib/mock-data";
+import { calculatePackageUsageFromClasses, countPackageRelations, deleteMemberPackage, getPackageDetail, listClassesByPackage, listMembers, listStudios, type PackageUsage } from "@/lib/data";
+import { mockClasses, mockMembers, mockPackages, mockStudios } from "@/lib/mock-data";
 import { getPackageFinishedMessage, getPackageUsageLabel, getPackageUsageTone } from "@/lib/packages/usageDisplay";
 import { getPackageDeletePrompt } from "@/lib/relationPrompts";
 import { formatMoney } from "@/lib/salary/formatMoney";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
-import type { ClassRecord, Member, MemberPackage, Teacher } from "@/types";
+import type { ClassRecord, Member, MemberPackage, Studio } from "@/types";
 
 const courseTypeLabels: Record<string, string> = { group: "团课", private: "私教", trial: "体验课", substitute: "代课", other: "其他" };
 
@@ -22,7 +22,7 @@ export function PackageDetailView({ packageId }: { packageId: string }) {
   const [user, setUser] = useState<User | null>(null);
   const [item, setItem] = useState<MemberPackage | null>(mockPackages.find((record) => record.id === packageId) ?? null);
   const [members, setMembers] = useState<Member[]>(mockMembers);
-  const [teachers, setTeachers] = useState<Teacher[]>(mockTeachers);
+  const [studios, setStudios] = useState<Studio[]>(mockStudios);
   const [classes, setClasses] = useState<ClassRecord[]>(mockClasses.filter((record) => record.package_id === packageId));
   const [message, setMessage] = useState("");
 
@@ -36,15 +36,15 @@ export function PackageDetailView({ packageId }: { packageId: string }) {
         setMessage("当前是体验数据，登录后可以查看你自己的课包详情。");
         return;
       }
-      const [realPackage, realMembers, realTeachers, realClasses] = await Promise.all([
+      const [realPackage, realMembers, realStudios, realClasses] = await Promise.all([
         getPackageDetail(supabase, currentUser.id, packageId),
         listMembers(supabase, currentUser.id),
-        listTeachers(supabase, currentUser.id),
+        listStudios(supabase, currentUser.id),
         listClassesByPackage(supabase, currentUser.id, packageId)
       ]);
       setItem(realPackage);
       setMembers(realMembers);
-      setTeachers(realTeachers);
+      setStudios(realStudios);
       setClasses(realClasses);
     }).catch(() => setMessage("网络好像开小差了，请再试一次～"));
   }, [packageId]);
@@ -76,7 +76,7 @@ export function PackageDetailView({ packageId }: { packageId: string }) {
   }
 
   const member = members.find((record) => record.id === item.member_id);
-  const teacher = teachers.find((record) => record.id === item.teacher_id);
+  const studio = studios.find((record) => record.id === item.studio_id);
   const usage = calculatePackageUsageFromClasses(item, classes);
 
   return (
@@ -89,7 +89,7 @@ export function PackageDetailView({ packageId }: { packageId: string }) {
             <div>
               <p className="text-sm text-muted-foreground">{member?.name ?? "会员"}</p>
               <h1 className="mt-2 text-2xl font-semibold">{item.package_name}</h1>
-              <p className="mt-2 text-sm text-muted-foreground">{courseTypeLabels[item.course_type]} · {item.purchase_date}</p>
+              <p className="mt-2 text-sm text-muted-foreground">{studio?.name ?? "未选择瑜伽馆"} · {courseTypeLabels[item.course_type]} · {item.purchase_date}</p>
             </div>
             <CreditCard className="size-6 text-primary" />
           </div>
@@ -97,12 +97,11 @@ export function PackageDetailView({ packageId }: { packageId: string }) {
           <div className="grid grid-cols-3 gap-2 text-sm">
             <Pill label="成交价" value={`¥${formatMoney(item.total_amount)}`} />
             <Pill label="总课时" value={`${item.total_sessions}`} />
-            <Pill label="单节" value={`¥${formatMoney(item.unit_price)}`} strong />
+            <Pill label="客单价" value={`¥${formatMoney(item.unit_price)}`} strong />
           </div>
-          {teacher ? <Badge>{teacher.name}</Badge> : null}
           {item.note ? <p className="rounded-3xl bg-card/70 p-3 text-sm text-muted-foreground">{item.note}</p> : null}
           <Button asChild className="w-full">
-            <Link href={`/classes?memberId=${item.member_id}&packageId=${item.id}&teacherId=${item.teacher_id ?? ""}&courseType=private`}>用这个课包记一节课</Link>
+            <Link href={`/classes?memberId=${item.member_id}&packageId=${item.id}&studioId=${item.studio_id ?? ""}&courseType=private`}>用这个课包记一节课</Link>
           </Button>
           <div className="grid grid-cols-2 gap-3">
             <Button asChild variant="secondary"><Link href={`/packages?memberId=${item.member_id}&editPackageId=${item.id}`}><PenLine className="mr-2 size-4" />编辑课包</Link></Button>

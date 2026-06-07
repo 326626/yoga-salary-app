@@ -21,8 +21,8 @@
 
 - 邮箱密码注册、登录、退出
 - 瑜伽馆 / 工作地点 CRUD
-- 会员 CRUD
-- 课包 CRUD，自动计算单节成交价
+- 会员 CRUD，会员需要绑定瑜伽馆 / 工作地点
+- 课包 CRUD，支持按总价或客单价录入，并自动补齐总成交金额、总课时和单节成交价
 - 课程记录新增、编辑、删除
 - 业绩记录新增、编辑、删除
 - 从课包快速记录私教课
@@ -138,6 +138,8 @@ DEEPSEEK_API_KEY=
 
 所有业务表都有 `user_id`，并启用了 RLS 以及 select / insert / update / delete policy。所有真实查询和写入都基于当前登录用户，不需要 service role。
 
+产品当前以“单个瑜伽老师本人”为中心：登录用户就是老师本人，主要按瑜伽馆 / 工作地点区分课程、会员、课包、业绩和工资。`teachers` 表与 `teacher_id` 字段仅作为历史兼容字段保留，不作为主要 UI 操作入口。
+
 ### Supabase Auth 生产配置
 
 部署到 Vercel 后，进入 Supabase Dashboard：
@@ -215,6 +217,9 @@ create table if not exists public.studios (
 );
 
 alter table public.packages
+  add column if not exists studio_id uuid references public.studios(id);
+
+alter table public.members
   add column if not exists studio_id uuid references public.studios(id);
 
 alter table public.classes

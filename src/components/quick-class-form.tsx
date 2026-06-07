@@ -111,6 +111,7 @@ export function QuickClassForm({ initialQuery = {} }: { initialQuery?: ClassPref
       const next = { ...current, [name]: value };
       if (name === "teacher_id") setTeacherTouched(true);
       if (name === "package_id" && value) {
+        const selected = packages.find((item) => item.id === value);
         const derived = derivePackageSelection({
           packageId: value,
           packages,
@@ -119,7 +120,10 @@ export function QuickClassForm({ initialQuery = {} }: { initialQuery?: ClassPref
         });
         next.member_id = derived.member_id ?? next.member_id;
         next.teacher_id = derived.teacher_id ?? next.teacher_id;
-        next.studio_id = packages.find((item) => item.id === value)?.studio_id ?? next.studio_id;
+        next.studio_id = derived.studio_id ?? selected?.studio_id ?? next.studio_id;
+      }
+      if (name === "member_id" && value) {
+        next.studio_id = members.find((item) => item.id === value)?.studio_id ?? next.studio_id;
       }
       if (name === "member_id" || (name === "course_type" && value !== "private")) next.package_id = "";
       if (name === "course_type" && value !== "private") next.member_id = "";
@@ -238,12 +242,9 @@ export function QuickClassForm({ initialQuery = {} }: { initialQuery?: ClassPref
           <form className="space-y-4" onSubmit={handleSubmit}>
             <Feedback message={feedback} tone={tone} />
             {!user ? <div className="rounded-3xl bg-secondary/70 p-4 text-sm text-muted-foreground">登录后可以保存课程记录～ <Link href="/login" className="font-medium text-primary">去登录</Link></div> : null}
-            {user && teachers.length === 0 ? <div className="space-y-3 rounded-3xl bg-secondary/70 p-4 text-sm text-muted-foreground"><p>还没有老师，先创建一个默认老师档案吧～</p><Button type="button" className="w-full" onClick={createDefault}>创建默认老师</Button></div> : null}
+            {user && teachers.length === 0 ? <div className="space-y-3 rounded-3xl bg-secondary/70 p-4 text-sm text-muted-foreground"><p>需要先创建一个兼容档案，之后会在后台自动使用。</p><Button type="button" className="w-full" onClick={createDefault}>创建我的档案</Button></div> : null}
             {user && studios.length === 0 ? <div className="rounded-3xl bg-secondary/70 p-4 text-sm text-muted-foreground">可以先添加一个瑜伽馆，之后工资就能按地点区分～ <Link href="/studios" className="font-medium text-primary">去添加</Link></div> : null}
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="日期" error={errors.date}><Input type="date" value={form.date} onChange={(e) => updateField("date", e.target.value)} /></Field>
-              <Field label="当前老师" error={errors.teacher_id}><Select value={form.teacher_id} onChange={(e) => updateField("teacher_id", e.target.value)}>{teachers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</Select></Field>
-            </div>
+            <Field label="日期" error={errors.date}><Input type="date" value={form.date} onChange={(e) => updateField("date", e.target.value)} /></Field>
             <Field label="在哪个瑜伽馆上课？" error={errors.studio_id}><Select value={form.studio_id} onChange={(e) => updateField("studio_id", e.target.value)}><option value="">不选择</option>{studios.map((studio) => <option key={studio.id} value={studio.id}>{studio.name}</option>)}</Select></Field>
             <Field label="课程类型" error={errors.course_type}><Select value={form.course_type} onChange={(e) => updateField("course_type", e.target.value)}>{Object.entries(courseTypeLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select></Field>
             <Field label="课程名称" error={errors.course_name}><Input placeholder="例如：晨间流瑜伽" value={form.course_name} onChange={(e) => updateField("course_name", e.target.value)} /></Field>
@@ -266,7 +267,7 @@ export function QuickClassForm({ initialQuery = {} }: { initialQuery?: ClassPref
       </Card>
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3"><h2 className="text-base font-semibold">最近课程记录</h2><Select className="w-36 text-sm" value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">全部瑜伽馆</option><option value="unassigned">未归属</option>{studios.map((studio) => <option key={studio.id} value={studio.id}>{studio.name}</option>)}</Select></div>
-        {visibleRecords.length === 0 ? <EmptyState text="还没有课程记录，先记一节课吧～" /> : visibleRecords.slice(0, 12).map((record) => <ClassCard key={record.id} record={record} records={records} teachers={teachers} studios={studios} members={members} packages={packages} onEdit={startEdit} onDelete={removeRecord} />)}
+        {visibleRecords.length === 0 ? <EmptyState text="还没有课程记录，先记一节课吧～" /> : visibleRecords.slice(0, 12).map((record) => <ClassCard key={record.id} record={record} records={records} studios={studios} members={members} packages={packages} onEdit={startEdit} onDelete={removeRecord} />)}
       </section>
     </div>
   );
@@ -290,11 +291,11 @@ function PackageUsageHint({ usage, overuseWarning }: { usage: PackageUsage; over
   );
 }
 
-function ClassCard({ record, records, teachers, studios, members, packages, onEdit, onDelete }: { record: ClassRecord; records: ClassRecord[]; teachers: Teacher[]; studios: Studio[]; members: Member[]; packages: MemberPackage[]; onEdit: (record: ClassRecord) => void; onDelete: (record: ClassRecord) => void }) {
+function ClassCard({ record, records, studios, members, packages, onEdit, onDelete }: { record: ClassRecord; records: ClassRecord[]; studios: Studio[]; members: Member[]; packages: MemberPackage[]; onEdit: (record: ClassRecord) => void; onDelete: (record: ClassRecord) => void }) {
   const missingPrivatePackage = record.course_type === "private" && !record.package_id;
   const memberPackage = packages.find((p) => p.id === record.package_id);
   const usage = memberPackage ? calculatePackageUsageFromClasses(memberPackage, records) : null;
-  return <article className="space-y-3 rounded-3xl border border-white/70 bg-card/90 p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div><div className="text-sm text-muted-foreground">{record.date}</div><h3 className="mt-1 font-medium">{record.course_name}</h3></div><Badge>{courseTypeLabels[record.course_type]}</Badge></div><div className="grid gap-1 text-sm text-muted-foreground"><span>{record.studio_id ? `归属：${studios.find((s) => s.id === record.studio_id)?.name ?? "瑜伽馆"}` : "未选择瑜伽馆"} · {record.hours} 课时</span><span>{teachers.find((t) => t.id === record.teacher_id)?.name ?? "当前老师"}</span>{record.member_id ? <span>会员：{members.find((m) => m.id === record.member_id)?.name ?? ""}</span> : null}{memberPackage ? <span>课包：{memberPackage.package_name}</span> : null}{usage ? <span>课包剩余：{getPackageUsageLabel(usage)}</span> : null}</div>{missingPrivatePackage ? <div className="flex gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-sm text-amber-800"><AlertCircle className="mt-0.5 size-4 shrink-0" />缺少课包，工资计算时可能需要补充。</div> : null}<div className="grid grid-cols-2 gap-2"><Button type="button" variant="secondary" size="sm" onClick={() => onEdit(record)}>编辑</Button><Button type="button" variant="outline" size="sm" onClick={() => onDelete(record)}>删除</Button></div></article>;
+  return <article className="space-y-3 rounded-3xl border border-white/70 bg-card/90 p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div><div className="text-sm text-muted-foreground">{record.date}</div><h3 className="mt-1 font-medium">{record.course_name}</h3></div><Badge>{courseTypeLabels[record.course_type]}</Badge></div><div className="grid gap-1 text-sm text-muted-foreground"><span>{record.studio_id ? `归属：${studios.find((s) => s.id === record.studio_id)?.name ?? "瑜伽馆"}` : "未选择瑜伽馆"} · {record.hours} 课时</span>{record.member_id ? <span>会员：{members.find((m) => m.id === record.member_id)?.name ?? ""}</span> : null}{memberPackage ? <span>课包：{memberPackage.package_name}</span> : null}{usage ? <span>课包剩余：{getPackageUsageLabel(usage)}</span> : null}</div>{missingPrivatePackage ? <div className="flex gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-sm text-amber-800"><AlertCircle className="mt-0.5 size-4 shrink-0" />缺少课包，工资计算时可能需要补充。</div> : null}<div className="grid grid-cols-2 gap-2"><Button type="button" variant="secondary" size="sm" onClick={() => onEdit(record)}>编辑</Button><Button type="button" variant="outline" size="sm" onClick={() => onDelete(record)}>删除</Button></div></article>;
 }
 
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
@@ -306,6 +307,6 @@ function EmptyState({ text }: { text: string }) {
 }
 
 function friendlyError(field: keyof FieldErrors, fallback: string) {
-  const messages: FieldErrors = { teacher_id: "请选择老师", course_name: "请输入课程名称", hours: "课时数需要大于 0", student_count: "学员人数不能小于 0", manual_fee: "手动课时费不能小于 0", date: "请选择日期", course_type: "请选择课程类型" };
+  const messages: FieldErrors = { teacher_id: "请先创建我的档案", course_name: "请输入课程名称", hours: "课时数需要大于 0", student_count: "学员人数不能小于 0", manual_fee: "手动课时费不能小于 0", date: "请选择日期", course_type: "请选择课程类型" };
   return messages[field] ?? fallback;
 }

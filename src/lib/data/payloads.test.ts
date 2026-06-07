@@ -295,6 +295,7 @@ describe("data helper payload builders", () => {
     const payload = buildCreateMemberPayload(
       {
         user_id: maliciousUserId,
+        studio_id: "99999999-9999-4999-8999-999999999901",
         name: "李女士",
         phone: "",
         note: ""
@@ -303,17 +304,20 @@ describe("data helper payload builders", () => {
     );
 
     expect(payload.user_id).toBe(trustedUserId);
+    expect(payload.studio_id).toBe("99999999-9999-4999-8999-999999999901");
   });
 
   it("member update payload does not contain user_id", () => {
     const payload = buildUpdateMemberPayload({
       user_id: maliciousUserId,
+      studio_id: "99999999-9999-4999-8999-999999999901",
       name: "李女士",
       phone: "",
       note: ""
     });
 
     expect(payload).not.toHaveProperty("user_id");
+    expect(payload.studio_id).toBe("99999999-9999-4999-8999-999999999901");
   });
 
   it("forces package user_id and calculates unit_price", () => {
@@ -337,6 +341,29 @@ describe("data helper payload builders", () => {
     expect(payload.user_id).toBe(trustedUserId);
     expect(payload.unit_price).toBe(300);
     expect(payload.studio_id).toBe("99999999-9999-4999-8999-999999999901");
+  });
+
+  it("package payload accepts unit price mode and does not require teacher_id", () => {
+    const payload = buildCreateMemberPackagePayload(
+      {
+        user_id: maliciousUserId,
+        pricing_mode: "unit_price",
+        studio_id: "99999999-9999-4999-8999-999999999901",
+        member_id: "33333333-3333-4333-8333-333333333301",
+        package_name: "私教 10 节",
+        course_type: "private",
+        unit_price: 300,
+        total_sessions: 10,
+        purchase_date: "2026-06-10",
+        note: ""
+      },
+      trustedUserId
+    );
+
+    expect(payload.user_id).toBe(trustedUserId);
+    expect(payload.teacher_id).toBeNull();
+    expect(payload.total_amount).toBe(3000);
+    expect(payload.unit_price).toBe(300);
   });
 
   it("package update payload does not contain user_id and recalculates unit_price", () => {

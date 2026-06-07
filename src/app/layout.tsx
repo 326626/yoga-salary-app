@@ -7,7 +7,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "瑜伽工资助手",
-  description: "服务于瑜伽老师和瑜伽馆的工资记录 App",
+  description: "服务于单个瑜伽老师的多瑜伽馆工资记录 App",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,

@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   createClassRecordInputSchema,
+  createMemberInputSchema,
   createMemberPackageInputSchema,
   createPerformanceInputSchema,
   settlementInputSchema,
   createStudioInputSchema,
+  updateMemberInputSchema,
   updateClassRecordInputSchema,
   updatePerformanceInputSchema,
   memberPackageSchema,
@@ -55,6 +57,35 @@ describe("core business schemas", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it("requires studio_id when creating a member", () => {
+    const valid = createMemberInputSchema.safeParse({
+      studio_id: "99999999-9999-4999-8999-999999999901",
+      name: "李女士",
+      phone: "",
+      note: ""
+    });
+    const invalid = createMemberInputSchema.safeParse({
+      studio_id: "",
+      name: "李女士",
+      phone: "",
+      note: ""
+    });
+
+    expect(valid.success).toBe(true);
+    expect(invalid.success).toBe(false);
+  });
+
+  it("allows updating a member studio_id", () => {
+    const result = updateMemberInputSchema.safeParse({
+      studio_id: "99999999-9999-4999-8999-999999999901",
+      name: "李女士",
+      phone: "",
+      note: ""
+    });
+
+    expect(result.success).toBe(true);
   });
 
   it("accepts studio_id in package class and performance form input", () => {
@@ -313,9 +344,27 @@ describe("core business schemas", () => {
     const result = createMemberPackageInputSchema.safeParse({
       member_id: "33333333-3333-4333-8333-333333333301",
       teacher_id: "",
+      studio_id: "99999999-9999-4999-8999-999999999901",
       package_name: "私教 10 节",
       course_type: "private",
       total_amount: "3000",
+      total_sessions: "10",
+      purchase_date: "2026-06-10",
+      note: ""
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts package input by unit price", () => {
+    const result = createMemberPackageInputSchema.safeParse({
+      member_id: "33333333-3333-4333-8333-333333333301",
+      teacher_id: "",
+      studio_id: "99999999-9999-4999-8999-999999999901",
+      pricing_mode: "unit_price",
+      package_name: "私教 10 节",
+      course_type: "private",
+      unit_price: "300",
       total_sessions: "10",
       purchase_date: "2026-06-10",
       note: ""
@@ -328,6 +377,7 @@ describe("core business schemas", () => {
     const result = createMemberPackageInputSchema.safeParse({
       member_id: "33333333-3333-4333-8333-333333333301",
       teacher_id: "",
+      studio_id: "99999999-9999-4999-8999-999999999901",
       package_name: "私教 10 节",
       course_type: "private",
       total_amount: "3000",
@@ -343,6 +393,7 @@ describe("core business schemas", () => {
     const result = createMemberPackageInputSchema.safeParse({
       member_id: "",
       teacher_id: "",
+      studio_id: "99999999-9999-4999-8999-999999999901",
       package_name: "私教 10 节",
       course_type: "private",
       total_amount: "3000",

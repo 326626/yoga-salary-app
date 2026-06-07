@@ -6,14 +6,15 @@ export type CreateMemberPackageInput = {
   member_id: string;
   teacher_id?: string | null;
   studio_id?: string | null;
+  pricing_mode?: "total_amount" | "unit_price";
   package_name: string;
   course_type: MemberPackage["course_type"];
-  total_amount: number;
+  total_amount?: number;
   total_sessions: number;
+  unit_price?: number;
   purchase_date: string;
   note?: string | null;
   user_id?: string;
-  unit_price?: number;
 };
 export type UpdateMemberPackageInput = CreateMemberPackageInput;
 
@@ -21,7 +22,22 @@ export function calculateUnitPrice(totalAmount: number, totalSessions: number) {
   return Math.round((totalAmount / totalSessions + Number.EPSILON) * 100) / 100;
 }
 
+export function calculateTotalAmount(unitPrice: number, totalSessions: number) {
+  return Math.round((unitPrice * totalSessions + Number.EPSILON) * 100) / 100;
+}
+
+export function calculatePackagePricing(input: Pick<CreateMemberPackageInput, "pricing_mode" | "total_amount" | "total_sessions" | "unit_price">) {
+  if (input.pricing_mode === "unit_price") {
+    const unitPrice = input.unit_price ?? 0;
+    const totalAmount = calculateTotalAmount(unitPrice, input.total_sessions);
+    return { total_amount: totalAmount, unit_price: unitPrice };
+  }
+  const totalAmount = input.total_amount ?? 0;
+  return { total_amount: totalAmount, unit_price: calculateUnitPrice(totalAmount, input.total_sessions) };
+}
+
 export function buildCreateMemberPackagePayload(input: CreateMemberPackageInput, userId: string) {
+  const pricing = calculatePackagePricing(input);
   return {
     user_id: userId,
     member_id: input.member_id,
@@ -29,24 +45,25 @@ export function buildCreateMemberPackagePayload(input: CreateMemberPackageInput,
     studio_id: input.studio_id || null,
     package_name: input.package_name,
     course_type: input.course_type,
-    total_amount: input.total_amount,
+    total_amount: pricing.total_amount,
     total_sessions: input.total_sessions,
-    unit_price: calculateUnitPrice(input.total_amount, input.total_sessions),
+    unit_price: pricing.unit_price,
     purchase_date: input.purchase_date,
     note: input.note || null
   };
 }
 
 export function buildUpdateMemberPackagePayload(input: UpdateMemberPackageInput) {
+  const pricing = calculatePackagePricing(input);
   return {
     member_id: input.member_id,
     teacher_id: input.teacher_id || null,
     studio_id: input.studio_id || null,
     package_name: input.package_name,
     course_type: input.course_type,
-    total_amount: input.total_amount,
+    total_amount: pricing.total_amount,
     total_sessions: input.total_sessions,
-    unit_price: calculateUnitPrice(input.total_amount, input.total_sessions),
+    unit_price: pricing.unit_price,
     purchase_date: input.purchase_date,
     note: input.note || null
   };

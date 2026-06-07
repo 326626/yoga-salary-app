@@ -30,6 +30,7 @@ export type Studio = {
 export type Member = {
   id: string;
   user_id: string;
+  studio_id: string | null;
   name: string;
   phone: string | null;
   note: string | null;

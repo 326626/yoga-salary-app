@@ -53,7 +53,7 @@ export function MineView() {
       const supabase = createBrowserSupabaseClient();
       const teacher = await createDefaultTeacher(supabase, user.id);
       setTeachers((current) => [teacher, ...current]);
-      setMessage("已创建你的老师档案～");
+      setMessage("已创建我的兼容档案～");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "保存失败，请稍后再试～");
     }
@@ -87,7 +87,7 @@ export function MineView() {
             </div>
             {teachers.length === 0 ? (
               <div className="space-y-3 rounded-3xl bg-secondary/70 p-4">
-                <p className="text-sm text-muted-foreground">还没有我的档案，先创建一个兼容档案吧。</p>
+                <p className="text-sm text-muted-foreground">还没有我的兼容档案，先创建后就能正常保存课程和工资快照。</p>
                 <Button className="w-full" onClick={handleCreateDefaultTeacher}>创建我的档案</Button>
               </div>
             ) : null}

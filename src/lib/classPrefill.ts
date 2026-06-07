@@ -41,6 +41,7 @@ export function derivePackageSelection(params: {
 
   return {
     member_id: selectedPackage.member_id,
+    studio_id: selectedPackage.studio_id ?? undefined,
     teacher_id: !params.teacherTouched && selectedPackage.teacher_id ? selectedPackage.teacher_id : params.currentTeacherId
   };
 }
@@ -64,6 +65,7 @@ export function applyClassQueryPrefill<T extends ClassPrefillForm>(form: T, quer
     if (selectedPackage) {
       next.package_id = selectedPackage.id;
       next.member_id = selectedPackage.member_id;
+      next.studio_id = selectedPackage.studio_id ?? next.studio_id;
       if (selectedPackage.teacher_id && !query.teacherId) {
         next.teacher_id = selectedPackage.teacher_id;
       }

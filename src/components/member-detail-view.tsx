@@ -8,12 +8,12 @@ import { ArrowLeft, BookOpenCheck, CreditCard, ReceiptText, ShoppingBag } from "
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { calculatePackageUsageFromClasses, getMemberDetail, listClassesByMember, listPackages, listPerformancesByMember, type PackageUsage } from "@/lib/data";
-import { mockClasses, mockMembers, mockPackages, mockPerformances } from "@/lib/mock-data";
+import { calculatePackageUsageFromClasses, getMemberDetail, listClassesByMember, listPackages, listPerformancesByMember, listStudios, type PackageUsage } from "@/lib/data";
+import { mockClasses, mockMembers, mockPackages, mockPerformances, mockStudios } from "@/lib/mock-data";
 import { getPackageUsageLabel, getPackageUsageTone } from "@/lib/packages/usageDisplay";
 import { formatMoney } from "@/lib/salary/formatMoney";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
-import type { ClassRecord, Member, MemberPackage, Performance } from "@/types";
+import type { ClassRecord, Member, MemberPackage, Performance, Studio } from "@/types";
 
 const courseTypeLabels: Record<string, string> = { group: "团课", private: "私教", trial: "体验课", substitute: "代课", other: "其他" };
 const performanceTypeLabels: Record<string, string> = { new_card: "新办卡", renewal: "续费", private_package: "私教包", product: "商品", other: "其他" };
@@ -22,6 +22,7 @@ export function MemberDetailView({ memberId }: { memberId: string }) {
   const [user, setUser] = useState<User | null>(null);
   const [member, setMember] = useState<Member | null>(mockMembers.find((item) => item.id === memberId) ?? null);
   const [packages, setPackages] = useState<MemberPackage[]>(mockPackages.filter((item) => item.member_id === memberId));
+  const [studios, setStudios] = useState<Studio[]>(mockStudios);
   const [classes, setClasses] = useState<ClassRecord[]>(mockClasses.filter((item) => item.member_id === memberId));
   const [performances, setPerformances] = useState<Performance[]>(mockPerformances.filter((item) => item.member_id === memberId));
   const [message, setMessage] = useState("");
@@ -36,16 +37,18 @@ export function MemberDetailView({ memberId }: { memberId: string }) {
         setMessage("当前是体验数据，登录后可以查看你自己的会员详情。");
         return;
       }
-      const [realMember, allPackages, realClasses, realPerformances] = await Promise.all([
+      const [realMember, allPackages, realClasses, realPerformances, realStudios] = await Promise.all([
         getMemberDetail(supabase, currentUser.id, memberId),
         listPackages(supabase, currentUser.id),
         listClassesByMember(supabase, currentUser.id, memberId),
-        listPerformancesByMember(supabase, currentUser.id, memberId)
+        listPerformancesByMember(supabase, currentUser.id, memberId),
+        listStudios(supabase, currentUser.id)
       ]);
       setMember(realMember);
       setPackages(allPackages.filter((item) => item.member_id === memberId));
       setClasses(realClasses);
       setPerformances(realPerformances);
+      setStudios(realStudios);
     }).catch(() => setMessage("网络好像开小差了，请再试一次～"));
   }, [memberId]);
 
@@ -64,6 +67,7 @@ export function MemberDetailView({ memberId }: { memberId: string }) {
       </div>
     );
   }
+  const studioName = studios.find((studio) => studio.id === member.studio_id)?.name ?? "未选择瑜伽馆";
 
   return (
     <div className="space-y-5">
@@ -76,14 +80,15 @@ export function MemberDetailView({ memberId }: { memberId: string }) {
           <div>
             <p className="text-sm text-muted-foreground">会员详情</p>
             <h1 className="mt-2 text-2xl font-semibold">{member.name}</h1>
-            <p className="mt-2 text-sm text-muted-foreground">{member.phone || "未填写手机号"}</p>
+            <p className="mt-2 text-sm text-muted-foreground">{studioName} · {member.phone || "未填写手机号"}</p>
           </div>
+          {!member.studio_id ? <p className="rounded-3xl bg-amber-50 p-3 text-sm text-amber-800">补充所属瑜伽馆后，工资和课包会更清楚～</p> : null}
           {member.note ? <p className="rounded-3xl bg-card/70 p-3 text-sm text-muted-foreground">{member.note}</p> : null}
           {message ? <p className="rounded-3xl bg-card/70 p-3 text-sm text-muted-foreground">{message}</p> : null}
           <div className="grid grid-cols-3 gap-2">
-            <Button asChild size="sm"><Link href={`/packages?memberId=${member.id}`}>添加课包</Link></Button>
-            <Button asChild size="sm" variant="secondary"><Link href={`/classes?memberId=${member.id}&courseType=private`}>记录私教课</Link></Button>
-            <Button asChild size="sm" variant="outline"><Link href={`/performances?memberId=${member.id}`}>记录业绩</Link></Button>
+            <Button asChild size="sm"><Link href={`/packages?memberId=${member.id}&studioId=${member.studio_id ?? ""}`}>添加课包</Link></Button>
+            <Button asChild size="sm" variant="secondary"><Link href={`/classes?memberId=${member.id}&studioId=${member.studio_id ?? ""}&courseType=private`}>记录私教课</Link></Button>
+            <Button asChild size="sm" variant="outline"><Link href={`/performances?memberId=${member.id}&studioId=${member.studio_id ?? ""}`}>记录业绩</Link></Button>
           </div>
         </CardContent>
       </Card>
@@ -133,7 +138,7 @@ function PackageRow({ item, usage }: { item: MemberPackage; usage: PackageUsage 
       </div>
       <UsageMini usage={usage} />
       <Button asChild variant="secondary" className="w-full">
-        <Link href={`/classes?memberId=${item.member_id}&packageId=${item.id}&teacherId=${item.teacher_id ?? ""}&courseType=private`}>用这个课包记一节课</Link>
+        <Link href={`/classes?memberId=${item.member_id}&packageId=${item.id}&studioId=${item.studio_id ?? ""}&courseType=private`}>用这个课包记一节课</Link>
       </Button>
     </article>
   );
